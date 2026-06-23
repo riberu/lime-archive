@@ -15,7 +15,7 @@ on conflict (id) do update set
 
 create table if not exists public.profiles (
   id uuid primary key references auth.users(id) on delete cascade,
-  display_name text not null default '익명 작가',
+  display_name text not null default 'New user',
   avatar_url text,
   created_at timestamptz not null default now()
 );
@@ -68,7 +68,7 @@ create table if not exists public.chat_sessions (
   id uuid primary key default gen_random_uuid(),
   story_id uuid not null references public.stories(id) on delete cascade,
   user_id uuid references public.profiles(id) on delete set null,
-  title text not null default '새 대화',
+  title text not null default 'New chat',
   user_note text not null default '',
   current_scene text not null default '',
   memory_summary text not null default '',
@@ -99,27 +99,35 @@ alter table public.story_characters enable row level security;
 alter table public.chat_sessions enable row level security;
 alter table public.chat_messages enable row level security;
 
+drop policy if exists "profiles are readable" on public.profiles;
 create policy "profiles are readable" on public.profiles
   for select using (true);
 
+drop policy if exists "users update own profile" on public.profiles;
 create policy "users update own profile" on public.profiles
   for update using (auth.uid() = id) with check (auth.uid() = id);
 
+drop policy if exists "public stories readable" on public.stories;
 create policy "public stories readable" on public.stories
   for select using (visibility = 'public' or auth.uid() = creator_id);
 
+drop policy if exists "creators manage own stories" on public.stories;
 create policy "creators manage own stories" on public.stories
   for all using (auth.uid() = creator_id) with check (auth.uid() = creator_id);
 
+drop policy if exists "public characters readable" on public.characters;
 create policy "public characters readable" on public.characters
   for select using (visibility = 'public' or auth.uid() = creator_id);
 
+drop policy if exists "creators manage own characters" on public.characters;
 create policy "creators manage own characters" on public.characters
   for all using (auth.uid() = creator_id) with check (auth.uid() = creator_id);
 
+drop policy if exists "story character links readable" on public.story_characters;
 create policy "story character links readable" on public.story_characters
   for select using (true);
 
+drop policy if exists "creators manage story character links" on public.story_characters;
 create policy "creators manage story character links" on public.story_characters
   for all using (
     exists (
@@ -136,12 +144,15 @@ create policy "creators manage story character links" on public.story_characters
     )
   );
 
+drop policy if exists "session owners read sessions" on public.chat_sessions;
 create policy "session owners read sessions" on public.chat_sessions
   for select using (auth.uid() = user_id);
 
+drop policy if exists "session owners manage sessions" on public.chat_sessions;
 create policy "session owners manage sessions" on public.chat_sessions
   for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
 
+drop policy if exists "session owners read messages" on public.chat_messages;
 create policy "session owners read messages" on public.chat_messages
   for select using (
     exists (
@@ -151,6 +162,7 @@ create policy "session owners read messages" on public.chat_messages
     )
   );
 
+drop policy if exists "session owners insert messages" on public.chat_messages;
 create policy "session owners insert messages" on public.chat_messages
   for insert with check (
     exists (
@@ -160,6 +172,7 @@ create policy "session owners insert messages" on public.chat_messages
     )
   );
 
+drop policy if exists "session owners delete messages" on public.chat_messages;
 create policy "session owners delete messages" on public.chat_messages
   for delete using (
     exists (
@@ -169,5 +182,6 @@ create policy "session owners delete messages" on public.chat_messages
     )
   );
 
+drop policy if exists "story assets are publicly readable" on storage.objects;
 create policy "story assets are publicly readable" on storage.objects
   for select using (bucket_id = 'story-assets');

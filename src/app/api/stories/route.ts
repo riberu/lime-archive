@@ -6,7 +6,7 @@ import type { Story } from "@/lib/types";
 type StoryPayload = {
   title?: string;
   description?: string;
-  tags?: string;
+  tags?: string | string[];
   thumbnail_url?: string;
   world?: string;
   ai_rules?: string;
@@ -58,7 +58,7 @@ export async function POST(request: Request) {
 }
 
 function normalizeStory(body: StoryPayload): Story {
-  const title = clean(body.title) || "새 스토리";
+  const title = clean(body.title) || "Untitled story";
   const world = clean(body.world);
   const aiRules = clean(body.ai_rules);
   const characters = clean(body.characters);
@@ -70,12 +70,12 @@ function normalizeStory(body: StoryPayload): Story {
     id: slugId("story"),
     creatorId: body.creatorId ?? "demo-user",
     title,
-    description: clean(body.description) || "아직 소개가 없습니다.",
+    description: clean(body.description) || "No description yet.",
     thumbnailUrl: clean(body.thumbnail_url) || "https://images.unsplash.com/photo-1490730141103-6cac27aaab94?auto=format&fit=crop&w=1200&q=80",
-    systemPrompt: systemPrompt || "능동적으로 장면을 전개하는 롤플레잉 게임마스터로 행동한다.",
-    openingMessage: clean(body.opening_message) || `${title}의 첫 장면이 조용히 열린다.`,
-    currentScene: clean(body.current_scene) || "첫 장면을 시작하기 직전이다.",
-    statusText: clean(body.status_text) || "#001 | 시작",
+    systemPrompt: systemPrompt || "Act as an active roleplay game master who continuously develops the scene.",
+    openingMessage: clean(body.opening_message) || `${title} begins in a quiet scene.`,
+    currentScene: clean(body.current_scene) || "The first scene is about to begin.",
+    statusText: clean(body.status_text) || "#001 | Start",
     tags: parseTags(body.tags),
     visibility: body.visibility ?? "private",
     likeCount: 0,
@@ -84,7 +84,11 @@ function normalizeStory(body: StoryPayload): Story {
   };
 }
 
-function parseTags(value?: string) {
+function parseTags(value?: string | string[]) {
+  if (Array.isArray(value)) {
+    return value.map((tag) => tag.trim()).filter(Boolean).slice(0, 10);
+  }
+
   return (value ?? "")
     .split(",")
     .map((tag) => tag.trim())

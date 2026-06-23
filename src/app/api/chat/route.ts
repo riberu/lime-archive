@@ -39,9 +39,9 @@ export async function POST(request: Request) {
 
   if (!apiKey) {
     return streamText(
-      "묵유는 잠시 당신의 말을 곱씹더니, 손끝으로 낡은 단말의 화면을 밀어 올렸다.\n\n" +
-        "\"좋습니다. 지금부터는 당신의 설정을 우선으로 두고 진행하죠. 그런데 방금, 기록 보관소의 잠금이 혼자 열렸습니다. 누군가 이 대화를 듣고 있었던 것 같습니다.\"\n\n" +
-        "복도 끝의 형광등이 한 번 깜박이고, 닫혀 있던 문 너머에서 낮은 발소리가 가까워진다.",
+      "The scene keeps moving even after your short reply.\n\n" +
+        "\"Good. I will keep your note as the highest priority and continue the story from the current situation. A new reaction is already forming nearby.\"\n\n" +
+        "A quiet sound rises from beyond the door, and someone you did not expect seems to be approaching.",
       18,
       body.sessionId
     );

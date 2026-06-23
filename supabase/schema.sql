@@ -92,6 +92,14 @@ create index if not exists chat_sessions_user_id_idx on public.chat_sessions (us
 create index if not exists chat_sessions_story_id_idx on public.chat_sessions (story_id);
 create index if not exists chat_messages_session_created_idx on public.chat_messages (session_id, created_at);
 
+grant usage on schema public to anon, authenticated, service_role;
+grant select on public.stories to anon, authenticated;
+grant select on public.characters to anon, authenticated;
+grant all privileges on all tables in schema public to service_role;
+grant all privileges on all sequences in schema public to service_role;
+alter default privileges in schema public grant all privileges on tables to service_role;
+alter default privileges in schema public grant all privileges on sequences to service_role;
+
 alter table public.profiles enable row level security;
 alter table public.stories enable row level security;
 alter table public.characters enable row level security;

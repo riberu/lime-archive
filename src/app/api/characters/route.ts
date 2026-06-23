@@ -56,15 +56,15 @@ export async function POST(request: Request) {
 }
 
 function normalizeCharacter(body: CharacterPayload): Character {
-  const name = clean(body.name) || "새 캐릭터";
+  const name = clean(body.name) || "New character";
   const relationship = clean(body.relationship);
   const prompt =
     clean(body.prompt) ||
     [
-      `캐릭터 이름: ${name}`,
-      `성격: ${clean(body.personality)}`,
-      `말투: ${clean(body.speech_style)}`,
-      relationship ? `관계와 기억: ${relationship}` : ""
+      `Character name: ${name}`,
+      `Personality: ${clean(body.personality)}`,
+      `Speech style: ${clean(body.speech_style)}`,
+      relationship ? `Relationship memory: ${relationship}` : ""
     ]
       .filter(Boolean)
       .join("\n");
@@ -74,11 +74,11 @@ function normalizeCharacter(body: CharacterPayload): Character {
     creatorId: body.creatorId ?? "demo-user",
     storyId: body.storyId || undefined,
     name,
-    description: clean(body.description) || "아직 소개가 없습니다.",
+    description: clean(body.description) || "No description yet.",
     avatarUrl: clean(body.avatar_url) || "https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=600&q=80",
     personality: clean(body.personality),
     speechStyle: clean(body.speech_style),
-    firstMessage: clean(body.first_message) || `${name}이 당신을 바라본다.`,
+    firstMessage: clean(body.first_message) || `${name} looks at you quietly.`,
     prompt,
     visibility: body.visibility ?? "private"
   };

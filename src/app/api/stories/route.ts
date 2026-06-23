@@ -36,7 +36,7 @@ export async function POST(request: Request) {
   const { data, error } = await supabase
     .from("stories")
     .insert({
-      creator_id: body.creatorId ?? process.env.APP_DEMO_USER_ID,
+      creator_id: body.creatorId ?? process.env.APP_DEMO_USER_ID ?? null,
       title: story.title,
       description: story.description,
       thumbnail_url: story.thumbnailUrl,

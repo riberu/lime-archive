@@ -22,7 +22,7 @@ create table if not exists public.profiles (
 
 create table if not exists public.stories (
   id uuid primary key default gen_random_uuid(),
-  creator_id uuid not null references public.profiles(id) on delete cascade,
+  creator_id uuid references public.profiles(id) on delete set null,
   title text not null,
   description text not null default '',
   thumbnail_url text,
@@ -41,7 +41,7 @@ create table if not exists public.stories (
 
 create table if not exists public.characters (
   id uuid primary key default gen_random_uuid(),
-  creator_id uuid not null references public.profiles(id) on delete cascade,
+  creator_id uuid references public.profiles(id) on delete set null,
   story_id uuid references public.stories(id) on delete set null,
   name text not null,
   description text not null default '',
@@ -67,7 +67,7 @@ create table if not exists public.story_characters (
 create table if not exists public.chat_sessions (
   id uuid primary key default gen_random_uuid(),
   story_id uuid not null references public.stories(id) on delete cascade,
-  user_id uuid not null references public.profiles(id) on delete cascade,
+  user_id uuid references public.profiles(id) on delete set null,
   title text not null default '새 대화',
   user_note text not null default '',
   current_scene text not null default '',

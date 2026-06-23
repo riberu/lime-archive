@@ -49,10 +49,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ id: session.id });
   }
 
-  const userId = body.userId ?? process.env.APP_DEMO_USER_ID;
-  if (!userId) {
-    return NextResponse.json({ error: "userId or APP_DEMO_USER_ID is required" }, { status: 400 });
-  }
+  const userId = body.userId ?? process.env.APP_DEMO_USER_ID ?? null;
 
   const { data, error } = await supabase
     .from("chat_sessions")

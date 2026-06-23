@@ -4,7 +4,7 @@ import type { Character, ChatMessage, ChatSession, Story } from "@/lib/types";
 
 type StoryRow = {
   id: string;
-  creator_id: string;
+  creator_id: string | null;
   title: string;
   description: string;
   thumbnail_url: string | null;
@@ -21,7 +21,7 @@ type StoryRow = {
 
 type CharacterRow = {
   id: string;
-  creator_id: string;
+  creator_id: string | null;
   story_id: string | null;
   name: string;
   description: string;
@@ -36,7 +36,7 @@ type CharacterRow = {
 type SessionRow = {
   id: string;
   story_id: string;
-  user_id: string;
+  user_id: string | null;
   title: string;
   user_note: string;
   current_scene: string | null;
@@ -122,7 +122,7 @@ export async function getMessages(sessionId: string) {
 export function mapStory(row: StoryRow): Story {
   return {
     id: row.id,
-    creatorId: row.creator_id,
+    creatorId: row.creator_id ?? "anonymous",
     title: row.title,
     description: row.description,
     thumbnailUrl: row.thumbnail_url ?? "",
@@ -141,7 +141,7 @@ export function mapStory(row: StoryRow): Story {
 export function mapCharacter(row: CharacterRow): Character {
   return {
     id: row.id,
-    creatorId: row.creator_id,
+    creatorId: row.creator_id ?? "anonymous",
     storyId: row.story_id ?? undefined,
     name: row.name,
     description: row.description,
@@ -158,7 +158,7 @@ export function mapSession(row: SessionRow): ChatSession {
   return {
     id: row.id,
     storyId: row.story_id,
-    userId: row.user_id,
+    userId: row.user_id ?? "anonymous",
     title: row.title,
     userNote: row.user_note,
     currentScene: row.current_scene ?? "",

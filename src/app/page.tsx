@@ -3,82 +3,61 @@ import Link from "next/link";
 import { ArrowRight, BookOpen, Bot, MessageCircle, PenLine, Sparkles } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { StoryCard } from "@/components/content-card";
-import { demoCharacters, demoStories } from "@/lib/mock-data";
+import { getCharacters, getStories } from "@/lib/data";
+import { genreItems, getFeaturedStories } from "@/lib/genres";
+
+export const dynamic = "force-dynamic";
+
+const heroImage = "https://images.unsplash.com/photo-1490730141103-6cac27aaab94?auto=format&fit=crop&w=1600&q=80";
 
 const workflow = [
   {
-    title: "세계관을 고르기",
-    description: "추천 스토리와 캐릭터를 둘러보고 원하는 장르의 작품을 엽니다.",
+    title: "세계관 선택",
+    description: "추천 스토리와 장르별 작품을 둘러보고 원하는 분위기의 채팅을 엽니다.",
     icon: BookOpen
   },
   {
     title: "대화 설정 작성",
-    description: "유저 노트에 역할, 외모, 기억해야 할 지침을 저장합니다.",
+    description: "유저 노트에 내 역할, 외모, 기억해야 할 지침을 저장합니다.",
     icon: PenLine
   },
   {
-    title: "GM과 이어 쓰기",
-    description: "Gemini가 세계관과 유저 노트를 합쳐 능동적으로 사건을 전개합니다.",
+    title: "GM과 이어가기",
+    description: "시스템 프롬프트와 유저 노트를 합쳐 장면이 멈추지 않도록 이어갑니다.",
     icon: MessageCircle
   }
 ];
 
-export default function HomePage() {
+export default async function HomePage() {
+  const [stories, characters] = await Promise.all([getStories(), getCharacters()]);
+  const featuredStories = getFeaturedStories(stories).slice(0, 4);
+  const featuredStory = featuredStories[0];
+
   return (
     <AppShell>
       <main className="mx-auto flex w-full max-w-7xl flex-col gap-12 px-5 py-8 md:py-12">
-        <section className="grid min-h-[520px] items-center gap-8 lg:grid-cols-[1.05fr_0.95fr]">
-          <div className="max-w-2xl">
-            <div className="inline-flex items-center gap-2 rounded-full border border-[#dce8d1] bg-white px-3 py-1 text-sm text-[#526047]">
-              <Sparkles size={16} className="text-leaf-600" />
+        <section className="relative isolate min-h-[520px] overflow-hidden rounded-lg bg-[#13200f] px-5 py-10 text-white md:px-10">
+          <Image src={featuredStory?.thumbnailUrl || heroImage} alt="" fill priority className="absolute inset-0 -z-20 object-cover opacity-55" />
+          <div className="absolute inset-0 -z-10 bg-black/35" />
+          <div className="flex min-h-[440px] max-w-3xl flex-col justify-center">
+            <div className="inline-flex w-fit items-center gap-2 rounded-full border border-white/25 bg-white/15 px-3 py-1 text-sm backdrop-blur">
+              <Sparkles size={16} />
               스토리 롤플레잉 AI 채팅
             </div>
-            <h1 className="mt-6 text-4xl font-semibold leading-tight tracking-tight md:text-6xl">
-              세계관을 열고,
-              <br />
-              대화를 이어 쓰세요.
+            <h1 className="mt-6 text-4xl font-semibold leading-tight md:text-6xl">
+              Lime Archive
             </h1>
-            <p className="mt-5 max-w-xl text-base leading-8 text-[#5f6d55]">
-              스토리, 등장인물, 유저 노트를 하나의 지시문으로 묶어 장면이 멈추지 않는 롤플레잉 채팅을 만듭니다.
-              제작자는 긴 폼으로 세계관을 관리하고, 사용자는 채팅 중에도 설정을 수정할 수 있습니다.
+            <p className="mt-5 max-w-2xl text-base leading-8 text-white/85">
+              세계관, 캐릭터, 유저 노트를 한 번에 엮어 장면이 계속 전개되는 개인 롤플레잉 채팅을 만듭니다.
+              제작자는 긴 폼으로 작품을 만들고, 사용자는 채팅 중에도 대화 설정을 바로 고칠 수 있습니다.
             </p>
             <div className="mt-8 flex flex-wrap gap-3">
               <Link href="/stories" className="inline-flex h-11 items-center gap-2 rounded-lg bg-leaf-500 px-5 font-semibold text-white hover:bg-leaf-600">
-                스토리 시작 <ArrowRight size={18} />
+                스토리 탐색 <ArrowRight size={18} />
               </Link>
-              <Link href="/create/story" className="inline-flex h-11 items-center gap-2 rounded-lg border border-[#dce8d1] bg-white px-5 font-semibold hover:bg-leaf-50">
+              <Link href="/create/story" className="inline-flex h-11 items-center gap-2 rounded-lg border border-white/30 bg-white/15 px-5 font-semibold text-white backdrop-blur hover:bg-white/25">
                 작품 만들기
               </Link>
-            </div>
-          </div>
-
-          <div className="relative">
-            <div className="overflow-hidden rounded-2xl border border-[#dce8d1] bg-white shadow-sm">
-              <div className="relative aspect-[4/3] bg-leaf-50">
-                <Image
-                  src={demoStories[0].thumbnailUrl}
-                  alt={demoStories[0].title}
-                  fill
-                  priority
-                  className="object-cover"
-                />
-              </div>
-              <div className="space-y-4 p-5">
-                <div className="flex items-start justify-between gap-4">
-                  <div>
-                    <p className="text-sm text-leaf-600">Featured Story</p>
-                    <h2 className="mt-1 text-xl font-semibold">{demoStories[0].title}</h2>
-                  </div>
-                  <span className="rounded-full bg-leaf-50 px-3 py-1 text-sm text-leaf-900">LIVE</span>
-                </div>
-                <p className="line-clamp-2 text-sm leading-6 text-[#66705f]">{demoStories[0].description}</p>
-                <div className="rounded-xl bg-[#fbfdf7] p-4">
-                  <p className="text-xs font-semibold text-[#7a866f]">USER NOTE</p>
-                  <p className="mt-2 text-sm leading-6 text-[#425038]">
-                    나는 DMA 신규 등록자. 낯선 용의 세계를 두려워하지만, 사건의 중심에서 물러서지 않는다.
-                  </p>
-                </div>
-              </div>
             </div>
           </div>
         </section>
@@ -87,11 +66,11 @@ export default function HomePage() {
           {workflow.map((item) => {
             const Icon = item.icon;
             return (
-              <div key={item.title} className="rounded-xl border border-[#e0ead4] bg-white p-5">
+              <div key={item.title} className="rounded-lg border border-[#e0ead4] bg-white p-5">
                 <div className="grid size-11 place-items-center rounded-lg bg-leaf-50 text-leaf-700">
                   <Icon size={21} />
                 </div>
-                <h3 className="mt-4 font-semibold">{item.title}</h3>
+                <h2 className="mt-4 font-semibold">{item.title}</h2>
                 <p className="mt-2 text-sm leading-6 text-[#66705f]">{item.description}</p>
               </div>
             );
@@ -106,20 +85,35 @@ export default function HomePage() {
             </div>
             <Link href="/stories" className="text-sm font-semibold text-leaf-700">전체 보기</Link>
           </div>
-          <div className="grid gap-5 md:grid-cols-2">
-            {demoStories.map((story) => (
+          <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-4">
+            {featuredStories.map((story) => (
               <StoryCard key={story.id} story={story} />
             ))}
           </div>
         </section>
 
-        <section className="rounded-2xl border border-[#e0ead4] bg-white p-6">
+        <section className="space-y-5">
+          <div>
+            <p className="text-sm font-medium text-leaf-600">Genres</p>
+            <h2 className="mt-1 text-2xl font-semibold">장르별로 찾기</h2>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            {genreItems.map((genre) => (
+              <Link key={genre.slug} href={`/stories/genre/${genre.slug}`} className="rounded-lg border border-[#e0ead4] bg-white p-4 hover:border-leaf-400 hover:bg-leaf-50">
+                <span className="font-semibold">{genre.label}</span>
+                <p className="mt-2 text-sm leading-6 text-[#66705f]">이 장르의 스토리를 모아봅니다.</p>
+              </Link>
+            ))}
+          </div>
+        </section>
+
+        <section className="rounded-lg border border-[#e0ead4] bg-white p-6">
           <div className="flex flex-col gap-5 md:flex-row md:items-center md:justify-between">
             <div>
               <p className="text-sm font-medium text-leaf-600">Character Studio</p>
-              <h2 className="mt-1 text-2xl font-semibold">캐릭터를 독립 생성하고 스토리에 연결</h2>
+              <h2 className="mt-1 text-2xl font-semibold">캐릭터를 만들고 스토리에 연결</h2>
               <p className="mt-2 text-sm leading-6 text-[#66705f]">
-                캐릭터는 단독으로 관리하고, 스토리 생성 페이지에서 등장인물로 연결할 수 있게 설계했습니다.
+                캐릭터는 독립적으로 관리하고, 스토리 제작 화면에서 등장 인물로 연결할 수 있게 설계했습니다.
               </p>
             </div>
             <Link href="/create/character" className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-[#dce8d1] px-4 text-sm font-semibold hover:bg-leaf-50">
@@ -127,11 +121,11 @@ export default function HomePage() {
             </Link>
           </div>
           <div className="mt-5 grid gap-3 md:grid-cols-2">
-            {demoCharacters.map((character) => (
-              <div key={character.id} className="rounded-lg bg-[#fbfdf7] p-4">
+            {characters.slice(0, 2).map((character) => (
+              <Link key={character.id} href={`/characters/${character.id}`} className="rounded-lg bg-[#fbfdf7] p-4 hover:bg-leaf-50">
                 <h3 className="font-semibold">{character.name}</h3>
-                <p className="mt-1 text-sm leading-6 text-[#66705f]">{character.description}</p>
-              </div>
+                <p className="mt-1 line-clamp-2 text-sm leading-6 text-[#66705f]">{character.description}</p>
+              </Link>
             ))}
           </div>
         </section>

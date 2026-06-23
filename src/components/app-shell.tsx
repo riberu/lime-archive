@@ -12,7 +12,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   return (
     <div className="min-h-dvh bg-[#fbfdf7] text-ink">
       <header className="sticky top-0 z-30 flex h-14 items-center border-b border-[#e2ead8] bg-white/95 px-4 backdrop-blur">
-        <Link href="/stories" className="flex items-center gap-2 font-semibold">
+        <Link href="/" className="flex items-center gap-2 font-semibold" aria-label="홈으로 이동">
           <span className="grid size-8 place-items-center rounded-lg bg-leaf-300 text-leaf-900">
             <Leaf size={18} />
           </span>

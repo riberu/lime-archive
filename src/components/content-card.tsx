@@ -3,11 +3,16 @@ import Link from "next/link";
 import { Heart, MessageCircle } from "lucide-react";
 import type { Character, Story } from "@/lib/types";
 
+const fallbackStoryImage = "https://images.unsplash.com/photo-1490730141103-6cac27aaab94?auto=format&fit=crop&w=1200&q=80";
+const fallbackCharacterImage = "https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=600&q=80";
+
 export function StoryCard({ story }: { story: Story }) {
+  const imageSrc = story.thumbnailUrl || fallbackStoryImage;
+
   return (
     <Link href={`/stories/${story.id}`} className="group overflow-hidden rounded-lg border border-[#e0ead4] bg-white">
       <div className="relative aspect-[4/3] overflow-hidden bg-leaf-50">
-        <Image src={story.thumbnailUrl} alt={story.title} fill className="object-cover transition-transform group-hover:scale-105" />
+        <Image src={imageSrc} alt={story.title} fill className="object-cover transition-transform group-hover:scale-105" />
       </div>
       <div className="space-y-3 p-4">
         <div>
@@ -31,11 +36,13 @@ export function StoryCard({ story }: { story: Story }) {
 }
 
 export function CharacterCard({ character }: { character: Character }) {
+  const imageSrc = character.avatarUrl || fallbackCharacterImage;
+
   return (
     <Link href={`/characters/${character.id}`} className="group rounded-lg border border-[#e0ead4] bg-white p-4">
       <div className="flex gap-4">
         <div className="relative size-20 shrink-0 overflow-hidden rounded-lg bg-leaf-50">
-          <Image src={character.avatarUrl} alt={character.name} fill className="object-cover" />
+          <Image src={imageSrc} alt={character.name} fill className="object-cover" />
         </div>
         <div className="min-w-0">
           <h3 className="line-clamp-1 font-semibold">{character.name}</h3>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   ArrowLeft,
@@ -197,7 +197,6 @@ export function CreatorLongForm({ type }: { type: CreatorType }) {
   const sections = type === "story" ? storySections : characterSections;
   const storageKey = `lime-${type}-draft`;
   const imageField = type === "story" ? "thumbnail_url" : "avatar_url";
-  const fileInputRef = useRef<HTMLInputElement>(null);
   const [draft, setDraft] = useState<Draft>({});
   const [activeSection, setActiveSection] = useState(sections[0].id);
   const [savedSections, setSavedSections] = useState<Record<string, boolean>>({});
@@ -223,9 +222,6 @@ export function CreatorLongForm({ type }: { type: CreatorType }) {
   }, [imageField, storageKey]);
 
   const preview = useMemo(() => buildPreview(type, draft, imageUrl), [draft, imageUrl, type]);
-  const activeIndex = sections.findIndex((section) => section.id === activeSection);
-  const active = sections[activeIndex] ?? sections[0];
-  const hasNext = activeIndex < sections.length - 1;
 
   const persistDraft = (nextDraft: Draft, nextImageUrl: string, nextSavedSections: Record<string, boolean>) => {
     window.localStorage.setItem(
@@ -240,7 +236,7 @@ export function CreatorLongForm({ type }: { type: CreatorType }) {
   };
 
   const saveDraft = (sectionId?: string) => {
-    const targetSection = sectionId ?? active.id;
+    const targetSection = sectionId ?? activeSection;
     const nextSavedSections = { ...savedSections, [targetSection]: true };
     setSavedSections(nextSavedSections);
     persistDraft(draft, imageUrl, nextSavedSections);
@@ -310,13 +306,6 @@ export function CreatorLongForm({ type }: { type: CreatorType }) {
     }
   };
 
-  const moveToSection = (sectionId: string) => {
-    setActiveSection(sectionId);
-    window.requestAnimationFrame(() => {
-      document.getElementById("creator-form-top")?.scrollIntoView({ block: "start", behavior: "smooth" });
-    });
-  };
-
   return (
     <div id="creator-form-top" className="min-h-[calc(100svh-88px)] overflow-hidden rounded-2xl border border-[#e5e7eb] bg-white shadow-sm">
       <div className="sticky top-0 z-20 flex h-16 items-center justify-between gap-3 border-b border-[#ececef] bg-white/95 px-4 backdrop-blur">
@@ -345,18 +334,18 @@ export function CreatorLongForm({ type }: { type: CreatorType }) {
       <div className="border-b border-[#ececef] bg-white">
         <div className="flex gap-2 overflow-x-auto px-4">
           {sections.map((section) => (
-            <button
+            <a
               key={section.id}
-              type="button"
-              onClick={() => moveToSection(section.id)}
+              href={`#creator-section-${section.id}`}
+              onClick={() => setActiveSection(section.id)}
               className={`relative flex h-12 shrink-0 items-center gap-1 border-b-2 px-2 text-sm font-bold transition ${
-                active.id === section.id ? "border-[#84cc16] text-[#1f2937]" : "border-transparent text-[#6b7280] hover:text-[#1f2937]"
+                activeSection === section.id ? "border-[#84cc16] text-[#1f2937]" : "border-transparent text-[#6b7280] hover:text-[#1f2937]"
               }`}
             >
               {section.shortTitle}
               {section.required ? <span className="text-[#65a30d]">*</span> : null}
               {savedSections[section.id] ? <Check size={14} className="text-[#65a30d]" /> : null}
-            </button>
+            </a>
           ))}
         </div>
       </div>
@@ -381,10 +370,10 @@ export function CreatorLongForm({ type }: { type: CreatorType }) {
                   </div>
                   <p className="mt-1 text-sm leading-6 text-[#6b7280]">최대 8MB까지 업로드할 수 있고, 저장 시 이미지 URL이 데이터베이스에 함께 저장됩니다.</p>
                   <div className="mt-3 flex flex-wrap items-center gap-2">
-                    <button type="button" onClick={() => fileInputRef.current?.click()} className="inline-flex h-9 items-center gap-2 rounded-lg bg-[#a3e635] px-3 text-sm font-extrabold text-[#1a2e05] hover:bg-[#bef264]">
+                    <label htmlFor={`${type}-image-upload`} className="inline-flex h-9 cursor-pointer items-center gap-2 rounded-lg bg-[#a3e635] px-3 text-sm font-extrabold text-[#1a2e05] hover:bg-[#bef264]">
                       {uploadState === "uploading" ? <Loader2 size={15} className="animate-spin" /> : <Upload size={15} />}
                       업로드
-                    </button>
+                    </label>
                     <button type="button" onClick={() => {
                       const nextUrl = type === "story" ? fallbackStoryImage : fallbackCharacterImage;
                       const nextDraft = { ...draft, [imageField]: nextUrl };
@@ -397,7 +386,6 @@ export function CreatorLongForm({ type }: { type: CreatorType }) {
                     <span className="text-xs text-[#6b7280]">{uploadLabel(uploadState)}</span>
                   </div>
                   <input
-                    ref={fileInputRef}
                     id={`${type}-image-upload`}
                     name={`${type}_image`}
                     type="file"
@@ -412,62 +400,81 @@ export function CreatorLongForm({ type }: { type: CreatorType }) {
               </div>
             </section>
 
-            <section className="rounded-2xl border border-[#e5e7eb] bg-white p-5">
-              <div className="mb-6 flex items-start justify-between gap-4">
-                <div>
-                  <div className="flex items-center gap-2">
-                    <FileText size={18} className="text-[#65a30d]" />
-                    <h3 className="text-xl font-extrabold">{active.title}</h3>
-                    {active.required ? <span className="text-sm font-bold text-[#65a30d]">*</span> : null}
+            {sections.map((section, index) => {
+              const previousSection = sections[index - 1];
+              const nextSection = sections[index + 1];
+
+              return (
+                <section key={section.id} id={`creator-section-${section.id}`} className="scroll-mt-32 rounded-2xl border border-[#e5e7eb] bg-white p-5">
+                  <div className="mb-6 flex items-start justify-between gap-4">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <FileText size={18} className="text-[#65a30d]" />
+                        <h3 className="text-xl font-extrabold">{section.title}</h3>
+                        {section.required ? <span className="text-sm font-bold text-[#65a30d]">*</span> : null}
+                      </div>
+                      <p className="mt-2 text-sm leading-6 text-[#6b7280]">{section.description}</p>
+                    </div>
+                    <button type="button" onClick={() => setPreviewOpen(true)} className="inline-flex h-8 shrink-0 items-center gap-1 rounded-lg bg-[#f7fee7] px-3 text-xs font-bold text-[#4d6b00] hover:bg-[#ecfccb]">
+                      <Eye size={14} /> 미리보기
+                    </button>
                   </div>
-                  <p className="mt-2 text-sm leading-6 text-[#6b7280]">{active.description}</p>
-                </div>
-                <button type="button" onClick={() => setPreviewOpen(true)} className="inline-flex h-8 shrink-0 items-center gap-1 rounded-lg bg-[#f7fee7] px-3 text-xs font-bold text-[#4d6b00] hover:bg-[#ecfccb]">
-                  <Eye size={14} /> 미리보기
-                </button>
-              </div>
 
-              <div className="space-y-5">
-                {active.fields.map((field) => (
-                  <FieldControl key={field.name} field={field} value={draft[field.name] ?? ""} onChange={(value) => updateField(field.name, value)} />
-                ))}
-              </div>
-            </section>
+                  <div className="space-y-5">
+                    {section.fields.map((field) => (
+                      <FieldControl key={field.name} field={field} value={draft[field.name] ?? ""} onChange={(value) => updateField(field.name, value)} />
+                    ))}
+                  </div>
 
-            <div className="flex flex-col gap-3 rounded-2xl border border-[#e5e7eb] bg-white p-4">
+                  <div className="mt-6 flex flex-col gap-3 border-t border-[#ececef] pt-4">
+                    {notice && activeSection === section.id ? <p className="text-sm font-semibold text-[#4d6b00]">{notice}</p> : null}
+                    {saveError && activeSection === section.id ? <p className="text-sm font-semibold text-red-600">{saveError}</p> : null}
+                    <div className="flex flex-wrap justify-between gap-2">
+                      {previousSection ? (
+                        <a href={`#creator-section-${previousSection.id}`} onClick={() => setActiveSection(previousSection.id)} className="inline-flex h-10 items-center rounded-lg border border-[#ececef] bg-white px-4 text-sm font-semibold">
+                          이전
+                        </a>
+                      ) : (
+                        <span />
+                      )}
+                      <div className="flex flex-wrap justify-end gap-2">
+                        <button type="button" onClick={() => saveDraft(section.id)} className="inline-flex h-10 items-center gap-2 rounded-lg border border-[#ececef] bg-white px-4 text-sm font-semibold hover:bg-[#f7f7f8]">
+                          <Save size={16} /> 단계 저장
+                        </button>
+                        {nextSection ? (
+                          <a href={`#creator-section-${nextSection.id}`} onClick={() => setActiveSection(nextSection.id)} className="inline-flex h-10 items-center gap-2 rounded-lg bg-[#1f2937] px-5 text-sm font-bold text-white hover:bg-[#111827]">
+                            다음 <ChevronDown size={16} className="-rotate-90" />
+                          </a>
+                        ) : (
+                          <>
+                            <button type="button" disabled={saving} onClick={() => void saveWork("private")} className="h-10 rounded-lg border border-[#ececef] bg-white px-4 text-sm font-semibold disabled:opacity-50">
+                              비공개 저장
+                            </button>
+                            <button type="button" disabled={saving} onClick={() => void saveWork("public")} className="h-10 rounded-lg bg-[#a3e635] px-5 text-sm font-extrabold text-[#1a2e05] disabled:opacity-50">
+                              {saving ? "저장 중..." : "게시"}
+                            </button>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </section>
+              );
+            })}
+
+            <div className="flex flex-col gap-2 rounded-2xl border border-[#e5e7eb] bg-white p-4">
               {notice ? <p className="text-sm font-semibold text-[#4d6b00]">{notice}</p> : null}
               {saveError ? <p className="text-sm font-semibold text-red-600">{saveError}</p> : null}
-              <div className="flex flex-wrap justify-between gap-2">
-                <button
-                  type="button"
-                  disabled={activeIndex === 0}
-                  onClick={() => moveToSection(sections[Math.max(activeIndex - 1, 0)].id)}
-                  className="h-10 rounded-lg border border-[#ececef] bg-white px-4 text-sm font-semibold disabled:opacity-40"
-                >
-                  이전
+              <div className="flex flex-wrap justify-end gap-2">
+                <button type="button" onClick={() => saveDraft()} className="inline-flex h-10 items-center gap-2 rounded-lg border border-[#ececef] bg-white px-4 text-sm font-semibold hover:bg-[#f7f7f8]">
+                  <Save size={16} /> 전체 임시저장
                 </button>
-                <div className="flex flex-wrap justify-end gap-2">
-                  <button type="button" onClick={() => saveDraft(active.id)} className="inline-flex h-10 items-center gap-2 rounded-lg border border-[#ececef] bg-white px-4 text-sm font-semibold hover:bg-[#f7f7f8]">
-                    <Save size={16} /> 단계 저장
-                  </button>
-                  {hasNext ? (
-                    <button type="button" onClick={() => {
-                      saveDraft(active.id);
-                      moveToSection(sections[activeIndex + 1].id);
-                    }} className="inline-flex h-10 items-center gap-2 rounded-lg bg-[#1f2937] px-5 text-sm font-bold text-white hover:bg-[#111827]">
-                      다음 <ChevronDown size={16} className="-rotate-90" />
-                    </button>
-                  ) : (
-                    <>
-                      <button type="button" disabled={saving} onClick={() => void saveWork("private")} className="h-10 rounded-lg border border-[#ececef] bg-white px-4 text-sm font-semibold disabled:opacity-50">
-                        비공개 저장
-                      </button>
-                      <button type="button" disabled={saving} onClick={() => void saveWork("public")} className="h-10 rounded-lg bg-[#a3e635] px-5 text-sm font-extrabold text-[#1a2e05] disabled:opacity-50">
-                        {saving ? "저장 중..." : "게시"}
-                      </button>
-                    </>
-                  )}
-                </div>
+                <button type="button" disabled={saving} onClick={() => void saveWork("private")} className="h-10 rounded-lg border border-[#ececef] bg-white px-4 text-sm font-semibold disabled:opacity-50">
+                  비공개 저장
+                </button>
+                <button type="button" disabled={saving} onClick={() => void saveWork("public")} className="h-10 rounded-lg bg-[#a3e635] px-5 text-sm font-extrabold text-[#1a2e05] disabled:opacity-50">
+                  {saving ? "저장 중..." : "게시"}
+                </button>
               </div>
             </div>
           </div>

@@ -1,10 +1,14 @@
 import Image from "next/image";
-import { Heart, Share2 } from "lucide-react";
+import { notFound } from "next/navigation";
+import { Share2 } from "lucide-react";
 import { WorkspaceLayout } from "@/components/app-shell";
 import { StartChatButton } from "@/components/start-chat-button";
+import { StoryLikeButton } from "@/components/story-like-button";
 import { getCharacters, getStory } from "@/lib/data";
 
 export const dynamic = "force-dynamic";
+
+const fallbackStoryImage = "https://images.unsplash.com/photo-1490730141103-6cac27aaab94?auto=format&fit=crop&w=1200&q=80";
 
 export default async function StoryDetailPage({
   params
@@ -13,7 +17,10 @@ export default async function StoryDetailPage({
 }) {
   const { storyId } = await params;
   const story = await getStory(storyId);
+  if (!story) notFound();
+
   const characters = await getCharacters(story.id);
+  const imageSrc = story.thumbnailUrl || fallbackStoryImage;
 
   return (
     <WorkspaceLayout>
@@ -21,7 +28,7 @@ export default async function StoryDetailPage({
         <div className="space-y-6">
           <div className="overflow-hidden rounded-lg border border-[#e0ead4] bg-white">
             <div className="relative aspect-[16/8] bg-leaf-50">
-              <Image src={story.thumbnailUrl} alt={story.title} fill priority className="object-cover" />
+              <Image src={imageSrc} alt={story.title} fill priority className="object-cover" />
             </div>
             <div className="space-y-5 p-6">
               <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
@@ -30,9 +37,7 @@ export default async function StoryDetailPage({
                   <p className="mt-3 leading-7 text-[#526047]">{story.description}</p>
                 </div>
                 <div className="flex gap-2">
-                  <button className="inline-flex h-10 items-center gap-2 rounded-lg border border-[#dce8d1] px-3 text-sm">
-                    <Heart size={17} /> {story.likeCount}
-                  </button>
+                  <StoryLikeButton storyId={story.id} initialLikeCount={story.likeCount} />
                   <button className="inline-flex h-10 items-center gap-2 rounded-lg border border-[#dce8d1] px-3 text-sm">
                     <Share2 size={17} /> 공유
                   </button>
@@ -79,7 +84,7 @@ export default async function StoryDetailPage({
               id="story-comment"
               name="story_comment"
               className="min-h-24 w-full resize-none rounded-lg border border-[#dce8d1] p-3 outline-none focus:border-leaf-500"
-              placeholder="타인에 대한 부적절한 댓글은 제재될 수 있습니다"
+              placeholder="댓글 기능은 이후 DB 테이블과 함께 연결할 예정입니다."
             />
             <div className="mt-3 flex justify-end">
               <button className="h-9 rounded-md bg-leaf-500 px-4 text-sm font-semibold text-white">댓글 작성</button>

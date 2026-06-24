@@ -56,7 +56,7 @@ type MessageRow = {
 
 export async function getStories() {
   const supabase = getSupabaseServerClient();
-  if (!supabase) return localStore.stories;
+  if (!supabase) return [];
 
   const { data } = await supabase
     .from("stories")
@@ -64,7 +64,7 @@ export async function getStories() {
     .order("created_at", { ascending: false })
     .returns<StoryRow[]>();
 
-  return data?.map(mapStory) ?? localStore.stories;
+  return data?.map(mapStory) ?? [];
 }
 
 export async function getCharacters(storyId?: string) {
@@ -82,28 +82,28 @@ export async function getCharacters(storyId?: string) {
 
 export async function getCharacter(id: string) {
   const supabase = getSupabaseServerClient();
-  if (!supabase) return localStore.characters.find((character) => character.id === id) ?? localStore.characters[0];
+  if (!supabase) return localStore.characters.find((character) => character.id === id) ?? null;
 
   const { data } = await supabase.from("characters").select("*").eq("id", id).single<CharacterRow>();
-  return data ? mapCharacter(data) : localStore.characters[0];
+  return data ? mapCharacter(data) : null;
 }
 
 export async function getStory(id: string) {
   const supabase = getSupabaseServerClient();
   if (!supabase) {
-    return localStore.stories.find((story) => story.id === id) ?? localStore.stories[0];
+    return localStore.stories.find((story) => story.id === id) ?? null;
   }
 
   const { data } = await supabase.from("stories").select("*").eq("id", id).single<StoryRow>();
-  return data ? mapStory(data) : localStore.stories[0];
+  return data ? mapStory(data) : null;
 }
 
 export async function getSession(id: string) {
   const supabase = getSupabaseServerClient();
-  if (!supabase) return localStore.sessions.find((session) => session.id === id) ?? localStore.sessions[0];
+  if (!supabase) return localStore.sessions.find((session) => session.id === id) ?? null;
 
   const { data } = await supabase.from("chat_sessions").select("*").eq("id", id).single<SessionRow>();
-  return data ? mapSession(data) : localStore.sessions[0];
+  return data ? mapSession(data) : null;
 }
 
 export async function getMessages(sessionId: string) {

@@ -1,9 +1,12 @@
 import Image from "next/image";
+import { notFound } from "next/navigation";
 import { MessageCircle } from "lucide-react";
 import { WorkspaceLayout } from "@/components/app-shell";
 import { getCharacter } from "@/lib/data";
 
 export const dynamic = "force-dynamic";
+
+const fallbackCharacterImage = "https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=600&q=80";
 
 export default async function CharacterDetailPage({
   params
@@ -12,13 +15,14 @@ export default async function CharacterDetailPage({
 }) {
   const { characterId } = await params;
   const character = await getCharacter(characterId);
+  if (!character) notFound();
 
   return (
     <WorkspaceLayout>
       <section className="mx-auto grid w-full max-w-5xl gap-6 px-5 py-8 lg:grid-cols-[320px_1fr]">
         <aside className="rounded-lg border border-[#e0ead4] bg-white p-5">
           <div className="relative aspect-square overflow-hidden rounded-lg bg-leaf-50">
-            <Image src={character.avatarUrl} alt={character.name} fill priority className="object-cover" />
+            <Image src={character.avatarUrl || fallbackCharacterImage} alt={character.name} fill priority className="object-cover" />
           </div>
           <h1 className="mt-5 text-2xl font-semibold">{character.name}</h1>
           <p className="mt-2 leading-7 text-[#66705f]">{character.description}</p>

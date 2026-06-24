@@ -20,6 +20,17 @@ create table if not exists public.profiles (
   created_at timestamptz not null default now()
 );
 
+create table if not exists public.app_profiles (
+  id text primary key default 'default',
+  display_name text not null default '',
+  bio text not null default '',
+  avatar_url text,
+  follower_count integer not null default 0,
+  following_count integer not null default 0,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
 create table if not exists public.stories (
   id uuid primary key default gen_random_uuid(),
   creator_id uuid references public.profiles(id) on delete set null,
@@ -85,12 +96,20 @@ create table if not exists public.chat_messages (
   created_at timestamptz not null default now()
 );
 
+create table if not exists public.story_likes (
+  story_id uuid not null references public.stories(id) on delete cascade,
+  user_key text not null,
+  created_at timestamptz not null default now(),
+  primary key (story_id, user_key)
+);
+
 create index if not exists stories_creator_id_idx on public.stories (creator_id);
 create index if not exists characters_creator_id_idx on public.characters (creator_id);
 create index if not exists characters_story_id_idx on public.characters (story_id);
 create index if not exists chat_sessions_user_id_idx on public.chat_sessions (user_id);
 create index if not exists chat_sessions_story_id_idx on public.chat_sessions (story_id);
 create index if not exists chat_messages_session_created_idx on public.chat_messages (session_id, created_at);
+create index if not exists story_likes_story_id_idx on public.story_likes (story_id);
 
 grant usage on schema public to anon, authenticated, service_role;
 grant select on public.stories to anon, authenticated;
@@ -101,11 +120,13 @@ alter default privileges in schema public grant all privileges on tables to serv
 alter default privileges in schema public grant all privileges on sequences to service_role;
 
 alter table public.profiles enable row level security;
+alter table public.app_profiles enable row level security;
 alter table public.stories enable row level security;
 alter table public.characters enable row level security;
 alter table public.story_characters enable row level security;
 alter table public.chat_sessions enable row level security;
 alter table public.chat_messages enable row level security;
+alter table public.story_likes enable row level security;
 
 drop policy if exists "profiles are readable" on public.profiles;
 create policy "profiles are readable" on public.profiles
@@ -114,6 +135,10 @@ create policy "profiles are readable" on public.profiles
 drop policy if exists "users update own profile" on public.profiles;
 create policy "users update own profile" on public.profiles
   for update using (auth.uid() = id) with check (auth.uid() = id);
+
+drop policy if exists "app profile readable" on public.app_profiles;
+create policy "app profile readable" on public.app_profiles
+  for select using (true);
 
 drop policy if exists "public stories readable" on public.stories;
 create policy "public stories readable" on public.stories

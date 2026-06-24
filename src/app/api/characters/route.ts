@@ -71,7 +71,7 @@ function normalizeCharacter(body: CharacterPayload): Character {
 
   return {
     id: slugId("character"),
-    creatorId: body.creatorId ?? "demo-user",
+    creatorId: body.creatorId ?? "local-user",
     storyId: body.storyId || undefined,
     name,
     description: clean(body.description) || "No description yet.",

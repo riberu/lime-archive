@@ -1,61 +1,95 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { X } from "lucide-react";
 
 type ProfileState = {
   displayName: string;
   bio: string;
+  avatarUrl: string;
+  followerCount: number;
+  followingCount: number;
+  workCount: number;
 };
 
-const defaultProfile: ProfileState = {
-  displayName: "리베루",
-  bio: "스토리와 캐릭터를 만드는 작가 프로필입니다."
+const emptyProfile: ProfileState = {
+  displayName: "",
+  bio: "",
+  avatarUrl: "",
+  followerCount: 0,
+  followingCount: 0,
+  workCount: 0
 };
 
 export function ProfileCard() {
-  const [profile, setProfile] = useState(defaultProfile);
-  const [draft, setDraft] = useState(defaultProfile);
+  const [profile, setProfile] = useState(emptyProfile);
+  const [draft, setDraft] = useState(emptyProfile);
   const [open, setOpen] = useState(false);
+  const [error, setError] = useState("");
+  const [isPending, startTransition] = useTransition();
 
   useEffect(() => {
-    const saved = window.localStorage.getItem("lime-profile");
-    if (!saved) return;
-
-    try {
-      const parsed = JSON.parse(saved) as ProfileState;
-      setProfile({ ...defaultProfile, ...parsed });
-      setDraft({ ...defaultProfile, ...parsed });
-    } catch {
-      window.localStorage.removeItem("lime-profile");
-    }
+    void fetch("/api/profile")
+      .then((response) => response.json())
+      .then((data: ProfileState) => {
+        const next = { ...emptyProfile, ...data };
+        setProfile(next);
+        setDraft(next);
+      })
+      .catch(() => setError("프로필을 불러오지 못했습니다."));
   }, []);
 
   const save = () => {
-    const next = {
-      displayName: draft.displayName.trim() || defaultProfile.displayName,
-      bio: draft.bio.trim() || defaultProfile.bio
-    };
-    setProfile(next);
-    window.localStorage.setItem("lime-profile", JSON.stringify(next));
-    setOpen(false);
+    setError("");
+    startTransition(async () => {
+      const response = await fetch("/api/profile", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          displayName: draft.displayName,
+          bio: draft.bio,
+          avatarUrl: draft.avatarUrl
+        })
+      });
+
+      if (!response.ok) {
+        setError("프로필을 저장하지 못했습니다.");
+        return;
+      }
+
+      const data = (await response.json()) as Partial<ProfileState>;
+      const next = { ...profile, ...data };
+      setProfile(next);
+      setDraft(next);
+      setOpen(false);
+    });
   };
+
+  const displayName = profile.displayName || "프로필 이름을 등록해 주세요";
+  const bio = profile.bio || "소개를 등록하면 이곳에 표시됩니다.";
+  const initial = profile.displayName.slice(0, 1).toUpperCase() || "L";
 
   return (
     <>
       <div className="rounded-lg border border-[#e0ead4] bg-white p-6">
         <div className="flex items-start gap-4">
-          <div className="grid size-16 place-items-center rounded-full bg-leaf-100 text-xl font-semibold text-leaf-900">
-            {profile.displayName.slice(0, 1).toUpperCase()}
+          <div className="grid size-16 place-items-center overflow-hidden rounded-full bg-leaf-100 text-xl font-semibold text-leaf-900">
+            {profile.avatarUrl ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={profile.avatarUrl} alt="" className="size-full object-cover" />
+            ) : (
+              initial
+            )}
           </div>
           <div className="flex-1">
-            <h1 className="text-xl font-semibold">{profile.displayName}</h1>
-            <p className="mt-2 text-sm leading-6 text-[#66705f]">{profile.bio}</p>
-            <div className="mt-4 flex gap-4 text-sm text-[#526047]">
-              <span>활동 작품 5</span>
-              <span>팔로워 0</span>
-              <span>팔로잉 0</span>
+            <h1 className="text-xl font-semibold">{displayName}</h1>
+            <p className="mt-2 text-sm leading-6 text-[#66705f]">{bio}</p>
+            <div className="mt-4 flex flex-wrap gap-4 text-sm text-[#526047]">
+              <span>등록 작품 {profile.workCount}</span>
+              <span>팔로워 {profile.followerCount}</span>
+              <span>팔로잉 {profile.followingCount}</span>
             </div>
+            {error ? <p className="mt-3 text-sm text-red-600">{error}</p> : null}
           </div>
           <button type="button" onClick={() => setOpen(true)} className="h-9 rounded-md border border-[#dce8d1] px-4 text-sm hover:bg-leaf-50">
             수정
@@ -83,6 +117,16 @@ export function ProfileCard() {
                   className="h-11 w-full rounded-lg border border-[#dce8d1] px-3 outline-none focus:border-leaf-500"
                 />
               </label>
+              <label htmlFor="profile-avatar-url" className="block">
+                <span className="mb-2 block text-sm font-medium">프로필 이미지 URL</span>
+                <input
+                  id="profile-avatar-url"
+                  name="avatar_url"
+                  value={draft.avatarUrl}
+                  onChange={(event) => setDraft((current) => ({ ...current, avatarUrl: event.target.value }))}
+                  className="h-11 w-full rounded-lg border border-[#dce8d1] px-3 outline-none focus:border-leaf-500"
+                />
+              </label>
               <label htmlFor="profile-bio" className="block">
                 <span className="mb-2 block text-sm font-medium">소개</span>
                 <textarea
@@ -99,8 +143,8 @@ export function ProfileCard() {
               <button type="button" onClick={() => setOpen(false)} className="h-10 rounded-lg border border-[#dce8d1] px-4 text-sm font-semibold hover:bg-leaf-50">
                 취소
               </button>
-              <button type="button" onClick={save} className="h-10 rounded-lg bg-leaf-500 px-4 text-sm font-semibold text-white hover:bg-leaf-600">
-                저장
+              <button type="button" disabled={isPending} onClick={save} className="h-10 rounded-lg bg-leaf-500 px-4 text-sm font-semibold text-white hover:bg-leaf-600 disabled:opacity-50">
+                {isPending ? "저장 중..." : "저장"}
               </button>
             </div>
           </div>

@@ -68,7 +68,7 @@ function normalizeStory(body: StoryPayload): Story {
 
   return {
     id: slugId("story"),
-    creatorId: body.creatorId ?? "demo-user",
+    creatorId: body.creatorId ?? "local-user",
     title,
     description: clean(body.description) || "No description yet.",
     thumbnailUrl: clean(body.thumbnail_url) || "https://images.unsplash.com/photo-1490730141103-6cac27aaab94?auto=format&fit=crop&w=1200&q=80",

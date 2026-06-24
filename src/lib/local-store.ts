@@ -1,4 +1,3 @@
-import { demoCharacters, demoMessages, demoSession, demoStories } from "@/lib/mock-data";
 import type { Character, ChatMessage, ChatSession, Story } from "@/lib/types";
 
 const globalStore = globalThis as typeof globalThis & {
@@ -13,10 +12,10 @@ const globalStore = globalThis as typeof globalThis & {
 export const localStore =
   globalStore.__limeArchiveStore ??
   (globalStore.__limeArchiveStore = {
-    stories: [...demoStories],
-    characters: [...demoCharacters],
-    sessions: [demoSession],
-    messages: [...demoMessages]
+    stories: [],
+    characters: [],
+    sessions: [],
+    messages: []
   });
 
 export function nowIso() {

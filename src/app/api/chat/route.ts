@@ -23,7 +23,12 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Message content is required" }, { status: 400 });
   }
 
-  const context = await loadChatContext(body);
+  let context: Awaited<ReturnType<typeof loadChatContext>>;
+  try {
+    context = await loadChatContext(body);
+  } catch (error) {
+    return NextResponse.json({ error: error instanceof Error ? error.message : "Chat context not found" }, { status: 404 });
+  }
   const systemInstruction = buildSystemInstruction({
     story: context.story,
     characters: context.characters,
@@ -110,7 +115,15 @@ export async function POST(request: Request) {
 
 async function loadChatContext(body: ChatRequest) {
   const session = await getSession(body.sessionId);
+  if (!session) {
+    throw new Error("Session not found");
+  }
+
   const story = await getStory(body.storyId || session.storyId);
+  if (!story) {
+    throw new Error("Story not found");
+  }
+
   const characters = await getCharacters(story.id);
   const storedMessages = await getMessages(session.id);
 

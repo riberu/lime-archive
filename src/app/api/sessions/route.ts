@@ -15,6 +15,10 @@ type SessionPayload = {
 export async function POST(request: Request) {
   const body = (await request.json()) as SessionPayload;
   const story = await getStory(body.storyId);
+  if (!story) {
+    return NextResponse.json({ error: "Story not found" }, { status: 404 });
+  }
+
   const title = body.title ?? story.title;
   const currentScene = body.scene || story.currentScene;
   const supabase = getSupabaseServerClient();
@@ -23,7 +27,7 @@ export async function POST(request: Request) {
     const session: ChatSession = {
       id: slugId("session"),
       storyId: story.id,
-      userId: body.userId ?? "demo-user",
+      userId: body.userId ?? "local-user",
       title,
       userNote: body.userNote ?? "",
       currentScene,
@@ -79,6 +83,11 @@ export async function POST(request: Request) {
       content: story.openingMessage
     });
   }
+
+  await supabase
+    .from("stories")
+    .update({ chat_count: story.chatCount + 1, updated_at: new Date().toISOString() })
+    .eq("id", story.id);
 
   return NextResponse.json(data);
 }

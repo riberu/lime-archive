@@ -1,5 +1,6 @@
 "use client";
 
+import type { FormEvent } from "react";
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
@@ -206,6 +207,7 @@ export function CreatorLongForm({ type }: { type: CreatorType }) {
   const [saveError, setSaveError] = useState("");
   const [notice, setNotice] = useState("");
   const [previewOpen, setPreviewOpen] = useState(false);
+  const [missingFields, setMissingFields] = useState<string[]>([]);
 
   useEffect(() => {
     const saved = window.localStorage.getItem(storageKey);
@@ -232,6 +234,9 @@ export function CreatorLongForm({ type }: { type: CreatorType }) {
 
   const updateField = (name: string, value: string) => {
     setDraft((current) => ({ ...current, [name]: value }));
+    if (value.trim()) {
+      setMissingFields((current) => current.filter((fieldName) => fieldName !== name));
+    }
     setNotice("");
   };
 
@@ -276,6 +281,10 @@ export function CreatorLongForm({ type }: { type: CreatorType }) {
   };
 
   const saveWork = async (visibility: Visibility) => {
+    if (!validateRequiredFields()) {
+      return;
+    }
+
     setSaving(true);
     setSaveError("");
     setNotice("");
@@ -304,6 +313,48 @@ export function CreatorLongForm({ type }: { type: CreatorType }) {
     } finally {
       setSaving(false);
     }
+  };
+
+  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const submitter = (event.nativeEvent as SubmitEvent).submitter as HTMLButtonElement | null;
+    const visibility = submitter?.value === "private" ? "private" : "public";
+    void saveWork(visibility);
+  };
+
+  const requiredFields = sections.flatMap((section) =>
+    section.fields
+      .filter((field) => field.required)
+      .map((field) => ({ ...field, sectionId: section.id }))
+  );
+
+  const validateRequiredFields = () => {
+    const missing = requiredFields.filter((field) => !draft[field.name]?.trim());
+
+    if (missing.length === 0) {
+      setMissingFields([]);
+      return true;
+    }
+
+    const firstMissing = missing[0];
+    const missingLabels = missing.map((field) => field.label).join(", ");
+    setMissingFields(missing.map((field) => field.name));
+    setActiveSection(firstMissing.sectionId);
+    setSaveError(`필수 항목을 입력해 주세요: ${missingLabels}`);
+    setNotice("");
+
+    window.requestAnimationFrame(() => {
+      document.getElementById(`creator-section-${firstMissing.sectionId}`)?.scrollIntoView({ block: "start", behavior: "smooth" });
+      window.setTimeout(() => document.getElementById(firstMissing.name)?.focus(), 250);
+    });
+
+    return false;
+  };
+
+  const jumpToSection = (sectionId: string) => {
+    setActiveSection(sectionId);
+    window.history.replaceState(null, "", `#creator-section-${sectionId}`);
+    document.getElementById(`creator-section-${sectionId}`)?.scrollIntoView({ block: "start", behavior: "smooth" });
   };
 
   return (
@@ -337,13 +388,16 @@ export function CreatorLongForm({ type }: { type: CreatorType }) {
             <a
               key={section.id}
               href={`#creator-section-${section.id}`}
-              onClick={() => setActiveSection(section.id)}
+              onClick={(event) => {
+                event.preventDefault();
+                jumpToSection(section.id);
+              }}
               className={`relative flex h-12 shrink-0 items-center gap-1 border-b-2 px-2 text-sm font-bold transition ${
                 activeSection === section.id ? "border-[#84cc16] text-[#1f2937]" : "border-transparent text-[#6b7280] hover:text-[#1f2937]"
               }`}
             >
               {section.shortTitle}
-              {section.required ? <span className="text-[#65a30d]">*</span> : null}
+              {section.fields.some((field) => field.required) ? <span className="text-[#65a30d]">*</span> : null}
               {savedSections[section.id] ? <Check size={14} className="text-[#65a30d]" /> : null}
             </a>
           ))}
@@ -352,7 +406,7 @@ export function CreatorLongForm({ type }: { type: CreatorType }) {
 
       <div className="grid min-h-[720px] lg:grid-cols-[1fr_340px]">
         <main className="min-w-0 border-r border-[#ececef] bg-[#fafafa]">
-          <div className="mx-auto max-w-3xl space-y-5 px-4 py-6">
+          <form action="#creator-form-top" className="mx-auto max-w-3xl space-y-5 px-4 py-6" onSubmit={handleSubmit}>
             <section className="rounded-2xl border border-[#e5e7eb] bg-white p-5">
               <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
                 <div className="relative grid size-28 shrink-0 place-items-center overflow-hidden rounded-2xl bg-[#f4f4f5] text-[#4d6b00]">
@@ -422,7 +476,13 @@ export function CreatorLongForm({ type }: { type: CreatorType }) {
 
                   <div className="space-y-5">
                     {section.fields.map((field) => (
-                      <FieldControl key={field.name} field={field} value={draft[field.name] ?? ""} onChange={(value) => updateField(field.name, value)} />
+                        <FieldControl
+                          key={field.name}
+                          field={field}
+                          value={draft[field.name] ?? ""}
+                          error={missingFields.includes(field.name)}
+                          onChange={(value) => updateField(field.name, value)}
+                        />
                     ))}
                   </div>
 
@@ -431,7 +491,10 @@ export function CreatorLongForm({ type }: { type: CreatorType }) {
                     {saveError && activeSection === section.id ? <p className="text-sm font-semibold text-red-600">{saveError}</p> : null}
                     <div className="flex flex-wrap justify-between gap-2">
                       {previousSection ? (
-                        <a href={`#creator-section-${previousSection.id}`} onClick={() => setActiveSection(previousSection.id)} className="inline-flex h-10 items-center rounded-lg border border-[#ececef] bg-white px-4 text-sm font-semibold">
+                        <a href={`#creator-section-${previousSection.id}`} onClick={(event) => {
+                          event.preventDefault();
+                          jumpToSection(previousSection.id);
+                        }} className="inline-flex h-10 items-center rounded-lg border border-[#ececef] bg-white px-4 text-sm font-semibold">
                           이전
                         </a>
                       ) : (
@@ -442,15 +505,18 @@ export function CreatorLongForm({ type }: { type: CreatorType }) {
                           <Save size={16} /> 단계 저장
                         </button>
                         {nextSection ? (
-                          <a href={`#creator-section-${nextSection.id}`} onClick={() => setActiveSection(nextSection.id)} className="inline-flex h-10 items-center gap-2 rounded-lg bg-[#1f2937] px-5 text-sm font-bold text-white hover:bg-[#111827]">
+                          <a href={`#creator-section-${nextSection.id}`} onClick={(event) => {
+                            event.preventDefault();
+                            jumpToSection(nextSection.id);
+                          }} className="inline-flex h-10 items-center gap-2 rounded-lg bg-[#1f2937] px-5 text-sm font-bold text-white hover:bg-[#111827]">
                             다음 <ChevronDown size={16} className="-rotate-90" />
                           </a>
                         ) : (
                           <>
-                            <button type="button" disabled={saving} onClick={() => void saveWork("private")} className="h-10 rounded-lg border border-[#ececef] bg-white px-4 text-sm font-semibold disabled:opacity-50">
+                            <button type="submit" name="visibility" value="private" disabled={saving} className="h-10 rounded-lg border border-[#ececef] bg-white px-4 text-sm font-semibold disabled:opacity-50">
                               비공개 저장
                             </button>
-                            <button type="button" disabled={saving} onClick={() => void saveWork("public")} className="h-10 rounded-lg bg-[#a3e635] px-5 text-sm font-extrabold text-[#1a2e05] disabled:opacity-50">
+                            <button type="submit" name="visibility" value="public" disabled={saving} className="h-10 rounded-lg bg-[#a3e635] px-5 text-sm font-extrabold text-[#1a2e05] disabled:opacity-50">
                               {saving ? "저장 중..." : "게시"}
                             </button>
                           </>
@@ -469,15 +535,15 @@ export function CreatorLongForm({ type }: { type: CreatorType }) {
                 <button type="button" onClick={() => saveDraft()} className="inline-flex h-10 items-center gap-2 rounded-lg border border-[#ececef] bg-white px-4 text-sm font-semibold hover:bg-[#f7f7f8]">
                   <Save size={16} /> 전체 임시저장
                 </button>
-                <button type="button" disabled={saving} onClick={() => void saveWork("private")} className="h-10 rounded-lg border border-[#ececef] bg-white px-4 text-sm font-semibold disabled:opacity-50">
+                <button type="submit" name="visibility" value="private" disabled={saving} className="h-10 rounded-lg border border-[#ececef] bg-white px-4 text-sm font-semibold disabled:opacity-50">
                   비공개 저장
                 </button>
-                <button type="button" disabled={saving} onClick={() => void saveWork("public")} className="h-10 rounded-lg bg-[#a3e635] px-5 text-sm font-extrabold text-[#1a2e05] disabled:opacity-50">
+                <button type="submit" name="visibility" value="public" disabled={saving} className="h-10 rounded-lg bg-[#a3e635] px-5 text-sm font-extrabold text-[#1a2e05] disabled:opacity-50">
                   {saving ? "저장 중..." : "게시"}
                 </button>
               </div>
             </div>
-          </div>
+          </form>
         </main>
 
         <aside className="hidden bg-white lg:block">
@@ -509,8 +575,11 @@ export function CreatorLongForm({ type }: { type: CreatorType }) {
   );
 }
 
-function FieldControl({ field, value, onChange }: { field: Field; value: string; onChange: (value: string) => void }) {
+function FieldControl({ field, value, error, onChange }: { field: Field; value: string; error?: boolean; onChange: (value: string) => void }) {
   const count = value.length;
+  const inputClassName = `w-full rounded-xl border bg-white text-sm outline-none focus:border-[#a3e635] focus:ring-2 focus:ring-[#ecfccb] ${
+    error ? "border-red-400 ring-2 ring-red-100" : "border-[#dfe3e8]"
+  }`;
 
   return (
     <label htmlFor={field.name} className="block">
@@ -529,8 +598,9 @@ function FieldControl({ field, value, onChange }: { field: Field; value: string;
           id={field.name}
           name={field.name}
           value={value}
+          required={field.required}
           onChange={(event) => onChange(event.target.value)}
-          className="h-11 w-full rounded-xl border border-[#dfe3e8] bg-white px-3 text-sm font-semibold outline-none focus:border-[#a3e635] focus:ring-2 focus:ring-[#ecfccb]"
+          className={`h-11 px-3 font-semibold ${inputClassName}`}
         >
           <option value="">선택 안 함</option>
           {field.options?.map((option) => (
@@ -542,9 +612,10 @@ function FieldControl({ field, value, onChange }: { field: Field; value: string;
           id={field.name}
           name={field.name}
           value={value}
+          required={field.required}
           maxLength={field.maxLength}
           onChange={(event) => onChange(event.target.value)}
-          className="h-11 w-full rounded-xl border border-[#dfe3e8] bg-white px-3 text-sm outline-none focus:border-[#a3e635] focus:ring-2 focus:ring-[#ecfccb]"
+          className={`h-11 px-3 ${inputClassName}`}
           placeholder={field.placeholder}
         />
       ) : (
@@ -552,13 +623,15 @@ function FieldControl({ field, value, onChange }: { field: Field; value: string;
           id={field.name}
           name={field.name}
           value={value}
+          required={field.required}
           maxLength={field.maxLength}
           onChange={(event) => onChange(event.target.value)}
-          className="w-full resize-y rounded-xl border border-[#dfe3e8] bg-white p-3 text-sm leading-6 outline-none focus:border-[#a3e635] focus:ring-2 focus:ring-[#ecfccb]"
+          className={`resize-y p-3 leading-6 ${inputClassName}`}
           placeholder={field.placeholder}
           rows={field.rows ?? 4}
         />
       )}
+      {error ? <p className="mt-2 text-xs font-semibold text-red-600">필수 항목입니다. 등록하려면 내용을 입력해 주세요.</p> : null}
     </label>
   );
 }

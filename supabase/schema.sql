@@ -103,6 +103,24 @@ create table if not exists public.story_likes (
   primary key (story_id, user_key)
 );
 
+create table if not exists public.character_likes (
+  character_id uuid not null references public.characters(id) on delete cascade,
+  user_key text not null,
+  created_at timestamptz not null default now(),
+  primary key (character_id, user_key)
+);
+
+create table if not exists public.notifications (
+  id uuid primary key default gen_random_uuid(),
+  user_key text,
+  category text not null default 'notice' check (category in ('attendance', 'notice', 'system')),
+  title text not null,
+  body text not null default '',
+  href text,
+  read_at timestamptz,
+  created_at timestamptz not null default now()
+);
+
 create index if not exists stories_creator_id_idx on public.stories (creator_id);
 create index if not exists characters_creator_id_idx on public.characters (creator_id);
 create index if not exists characters_story_id_idx on public.characters (story_id);
@@ -110,6 +128,8 @@ create index if not exists chat_sessions_user_id_idx on public.chat_sessions (us
 create index if not exists chat_sessions_story_id_idx on public.chat_sessions (story_id);
 create index if not exists chat_messages_session_created_idx on public.chat_messages (session_id, created_at);
 create index if not exists story_likes_story_id_idx on public.story_likes (story_id);
+create index if not exists character_likes_character_id_idx on public.character_likes (character_id);
+create index if not exists notifications_user_created_idx on public.notifications (user_key, created_at desc);
 
 grant usage on schema public to anon, authenticated, service_role;
 grant select on public.stories to anon, authenticated;
@@ -127,6 +147,8 @@ alter table public.story_characters enable row level security;
 alter table public.chat_sessions enable row level security;
 alter table public.chat_messages enable row level security;
 alter table public.story_likes enable row level security;
+alter table public.character_likes enable row level security;
+alter table public.notifications enable row level security;
 
 drop policy if exists "profiles are readable" on public.profiles;
 create policy "profiles are readable" on public.profiles
@@ -138,6 +160,10 @@ create policy "users update own profile" on public.profiles
 
 drop policy if exists "app profile readable" on public.app_profiles;
 create policy "app profile readable" on public.app_profiles
+  for select using (true);
+
+drop policy if exists "notifications readable" on public.notifications;
+create policy "notifications readable" on public.notifications
   for select using (true);
 
 drop policy if exists "public stories readable" on public.stories;

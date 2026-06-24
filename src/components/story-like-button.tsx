@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState, useTransition } from "react";
 import { Heart } from "lucide-react";
+import { getOrCreateUserKey } from "@/lib/user-key";
 
 export function StoryLikeButton({ storyId, initialLikeCount }: { storyId: string; initialLikeCount: number }) {
   const [liked, setLiked] = useState(false);
@@ -47,15 +48,4 @@ export function StoryLikeButton({ storyId, initialLikeCount }: { storyId: string
       <Heart size={17} fill={liked ? "currentColor" : "none"} /> {likeCount}
     </button>
   );
-}
-
-function getOrCreateUserKey() {
-  if (typeof window === "undefined") return "";
-
-  const existing = window.localStorage.getItem("lime-user-key");
-  if (existing) return existing;
-
-  const next = crypto.randomUUID();
-  window.localStorage.setItem("lime-user-key", next);
-  return next;
 }

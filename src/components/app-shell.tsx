@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { BookOpen, Bot, FolderKanban, Grid3X3, ImageIcon, MessageCircle, MoreHorizontal, Search, UserRound } from "lucide-react";
+import { Bell, BookOpen, Bot, FolderKanban, Heart, ImageIcon, MessageCircle, MoreHorizontal, Search, UserRound } from "lucide-react";
 
 const navItems = [
   { href: "/stories", label: "스토리", icon: BookOpen },
@@ -38,11 +38,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           />
         </div>
         <div className="flex items-center gap-2">
-          <Link href="/stories" className="ui-icon-btn ui-icon-btn-active" title="스토리 탐색">
-            <Grid3X3 size={17} />
+          <Link href="/favorites" className="ui-icon-btn ui-icon-btn-active" title="마음에 든 작품">
+            <Heart size={17} />
           </Link>
-          <Link href="/characters" className="ui-icon-btn" title="캐릭터">
-            <Bot size={17} />
+          <Link href="/notifications" className="ui-icon-btn relative" title="알림">
+            <Bell size={17} />
+            <span className="absolute right-1.5 top-1.5 size-2 rounded-full bg-[#a3e635]" />
           </Link>
           <Link href="/profile" className="grid size-[30px] place-items-center rounded-full bg-[#4d6b00] text-xs font-bold text-white" title="MY">
             <UserRound size={16} />

@@ -87,9 +87,7 @@ export function MyWorksManager({ items }: { items: WorkItem[] }) {
             key={item.value}
             type="button"
             onClick={() => setFilter(item.value)}
-            className={`h-9 rounded-full border px-4 text-sm ${
-              filter === item.value ? "border-leaf-500 bg-leaf-50 text-leaf-900" : "border-[#dce8d1] bg-white text-[#526047]"
-            }`}
+            className={`ui-chip ${filter === item.value ? "ui-chip-active" : ""}`}
           >
             {item.label}
           </button>
@@ -98,23 +96,23 @@ export function MyWorksManager({ items }: { items: WorkItem[] }) {
           type="button"
           disabled={!selected.length || isPending}
           onClick={deleteSelected}
-          className="ml-auto inline-flex h-9 items-center gap-2 rounded-full border border-red-200 bg-white px-4 text-sm text-red-600 disabled:cursor-not-allowed disabled:opacity-40"
+          className="ml-auto inline-flex h-9 items-center gap-2 rounded-full border border-red-200 bg-white px-4 text-sm font-semibold text-red-600 disabled:cursor-not-allowed disabled:opacity-40"
         >
           <Trash2 size={16} /> 선택 삭제
         </button>
       </div>
 
-      {error ? <p className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p> : null}
+      {error ? <p className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p> : null}
 
-      <div className="rounded-lg border border-[#e0ead4] bg-white">
-        <div className="grid gap-3 border-b border-[#eef4e8] p-4 text-sm font-semibold text-[#526047] md:grid-cols-[40px_100px_1fr_auto] md:items-center">
+      <div className="ui-panel-card overflow-hidden">
+        <div className="grid gap-3 border-b border-[#ececef] bg-[#f7f7f8] p-4 text-sm font-bold text-[#6b7280] md:grid-cols-[40px_100px_1fr_auto] md:items-center">
           <input
             id="select-all-works"
             name="select_all_works"
             type="checkbox"
             checked={allVisibleSelected}
             onChange={toggleAllVisible}
-            className="size-4 accent-leaf-500"
+            className="size-4 accent-[#a3e635]"
             aria-label="현재 목록 전체 선택"
           />
           <span>종류</span>
@@ -126,40 +124,37 @@ export function MyWorksManager({ items }: { items: WorkItem[] }) {
           visibleItems.map((item) => {
             const key = itemKey(item);
             return (
-              <div key={key} className="grid gap-3 border-b border-[#eef4e8] p-4 last:border-b-0 md:grid-cols-[40px_100px_1fr_auto] md:items-center">
+              <div key={key} className="grid gap-3 border-b border-[#ececef] p-4 last:border-b-0 md:grid-cols-[40px_100px_1fr_auto] md:items-center">
                 <input
                   id={`select-${key}`}
                   name="selected_works"
                   type="checkbox"
                   checked={selected.includes(key)}
                   onChange={() => toggleOne(item)}
-                  className="size-4 accent-leaf-500"
+                  className="size-4 accent-[#a3e635]"
                   aria-label={`${item.title} 선택`}
                 />
-                <span className="w-fit rounded-full bg-leaf-50 px-3 py-1 text-xs font-medium text-leaf-900">
+                <span className="w-fit rounded-md bg-[#ecfccb] px-3 py-1 text-xs font-extrabold text-[#4d6b00]">
                   {item.type === "story" ? "스토리" : "캐릭터"}
                 </span>
                 <div>
                   <h3 className="font-semibold">{item.title}</h3>
-                  <p className="mt-1 line-clamp-1 text-sm text-[#66705f]">{item.description}</p>
-                  <p className="mt-1 text-xs text-[#8b9682]">{item.visibility === "public" ? "공개" : "비공개"}</p>
+                  <p className="mt-1 line-clamp-1 text-sm text-[#6b7280]">{item.description}</p>
+                  <p className="mt-1 text-xs text-[#9ca3af]">{item.visibility === "public" ? "공개" : "비공개"}</p>
                 </div>
                 <div className="flex flex-wrap gap-2">
-                  <Link
-                    href={`/edit/${item.type}/${item.id}`}
-                    className="inline-flex h-9 items-center gap-2 rounded-md border border-[#dce8d1] px-3 text-sm hover:bg-leaf-50"
-                  >
-                    <Edit3 size={15} /> 수정
+                  <Link href={`/edit/${item.type}/${item.id}`} className="ui-icon-btn border border-[#ececef]" title="수정">
+                    <Edit3 size={16} />
                   </Link>
-                  <button type="button" className="inline-flex h-9 items-center gap-2 rounded-md border border-[#dce8d1] px-3 text-sm">
-                    <Share2 size={15} /> 공유
+                  <button type="button" className="ui-icon-btn border border-[#ececef]" title="공유">
+                    <Share2 size={16} />
                   </button>
                 </div>
               </div>
             );
           })
         ) : (
-          <div className="p-8 text-center text-sm text-[#66705f]">조건에 맞는 작품이 없습니다.</div>
+          <div className="p-8 text-center text-sm text-[#6b7280]">조건에 맞는 작품이 없습니다.</div>
         )}
       </div>
     </div>

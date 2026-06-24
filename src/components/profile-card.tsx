@@ -71,9 +71,9 @@ export function ProfileCard() {
 
   return (
     <>
-      <div className="rounded-lg border border-[#e0ead4] bg-white p-6">
+      <div className="ui-panel-card p-6">
         <div className="flex items-start gap-4">
-          <div className="grid size-16 place-items-center overflow-hidden rounded-full bg-leaf-100 text-xl font-semibold text-leaf-900">
+          <div className="grid size-16 place-items-center overflow-hidden rounded-full bg-[#4d6b00] text-xl font-extrabold text-white">
             {profile.avatarUrl ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img src={profile.avatarUrl} alt="" className="size-full object-cover" />
@@ -82,16 +82,16 @@ export function ProfileCard() {
             )}
           </div>
           <div className="flex-1">
-            <h1 className="text-xl font-semibold">{displayName}</h1>
-            <p className="mt-2 text-sm leading-6 text-[#66705f]">{bio}</p>
-            <div className="mt-4 flex flex-wrap gap-4 text-sm text-[#526047]">
-              <span>등록 작품 {profile.workCount}</span>
-              <span>팔로워 {profile.followerCount}</span>
-              <span>팔로잉 {profile.followingCount}</span>
+            <h1 className="text-xl font-bold">{displayName}</h1>
+            <p className="mt-2 text-sm leading-6 text-[#6b7280]">{bio}</p>
+            <div className="mt-4 flex flex-wrap gap-2 text-sm text-[#4d6b00]">
+              <span className="rounded-full bg-[#ecfccb] px-3 py-1 font-bold">등록 작품 {profile.workCount}</span>
+              <span className="rounded-full bg-[#f7f7f8] px-3 py-1 font-semibold text-[#6b7280]">팔로워 {profile.followerCount}</span>
+              <span className="rounded-full bg-[#f7f7f8] px-3 py-1 font-semibold text-[#6b7280]">팔로잉 {profile.followingCount}</span>
             </div>
             {error ? <p className="mt-3 text-sm text-red-600">{error}</p> : null}
           </div>
-          <button type="button" onClick={() => setOpen(true)} className="h-9 rounded-md border border-[#dce8d1] px-4 text-sm hover:bg-leaf-50">
+          <button type="button" onClick={() => setOpen(true)} className="h-9 rounded-lg border border-[#ececef] px-4 text-sm font-semibold hover:bg-[#f7f7f8]">
             수정
           </button>
         </div>
@@ -99,51 +99,51 @@ export function ProfileCard() {
 
       {open ? (
         <div className="fixed inset-0 z-50 bg-black/30 px-4 py-8">
-          <div className="mx-auto max-w-lg rounded-lg bg-white p-5 shadow-xl">
+          <div className="mx-auto max-w-lg rounded-[16px] bg-white p-5 shadow-xl">
             <div className="flex items-center justify-between">
-              <h2 className="text-lg font-semibold">내 정보 수정</h2>
-              <button type="button" onClick={() => setOpen(false)} className="grid size-9 place-items-center rounded-md hover:bg-leaf-50" aria-label="닫기">
+              <h2 className="font-story text-lg font-extrabold">내 정보 수정</h2>
+              <button type="button" onClick={() => setOpen(false)} className="ui-icon-btn" aria-label="닫기">
                 <X size={18} />
               </button>
             </div>
             <div className="mt-5 space-y-4">
               <label htmlFor="profile-display-name" className="block">
-                <span className="mb-2 block text-sm font-medium">닉네임</span>
+                <span className="mb-2 block text-sm font-semibold">닉네임</span>
                 <input
                   id="profile-display-name"
                   name="display_name"
                   value={draft.displayName}
                   onChange={(event) => setDraft((current) => ({ ...current, displayName: event.target.value }))}
-                  className="h-11 w-full rounded-lg border border-[#dce8d1] px-3 outline-none focus:border-leaf-500"
+                  className="h-11 w-full rounded-xl border border-[#ececef] bg-[#f7f7f8] px-3 outline-none focus:border-[#a3e635]"
                 />
               </label>
               <label htmlFor="profile-avatar-url" className="block">
-                <span className="mb-2 block text-sm font-medium">프로필 이미지 URL</span>
+                <span className="mb-2 block text-sm font-semibold">프로필 이미지 URL</span>
                 <input
                   id="profile-avatar-url"
                   name="avatar_url"
                   value={draft.avatarUrl}
                   onChange={(event) => setDraft((current) => ({ ...current, avatarUrl: event.target.value }))}
-                  className="h-11 w-full rounded-lg border border-[#dce8d1] px-3 outline-none focus:border-leaf-500"
+                  className="h-11 w-full rounded-xl border border-[#ececef] bg-[#f7f7f8] px-3 outline-none focus:border-[#a3e635]"
                 />
               </label>
               <label htmlFor="profile-bio" className="block">
-                <span className="mb-2 block text-sm font-medium">소개</span>
+                <span className="mb-2 block text-sm font-semibold">소개</span>
                 <textarea
                   id="profile-bio"
                   name="bio"
                   value={draft.bio}
                   onChange={(event) => setDraft((current) => ({ ...current, bio: event.target.value }))}
                   rows={5}
-                  className="w-full resize-y rounded-lg border border-[#dce8d1] p-3 leading-6 outline-none focus:border-leaf-500"
+                  className="w-full resize-y rounded-xl border border-[#ececef] bg-[#f7f7f8] p-3 leading-6 outline-none focus:border-[#a3e635]"
                 />
               </label>
             </div>
             <div className="mt-5 flex justify-end gap-2">
-              <button type="button" onClick={() => setOpen(false)} className="h-10 rounded-lg border border-[#dce8d1] px-4 text-sm font-semibold hover:bg-leaf-50">
+              <button type="button" onClick={() => setOpen(false)} className="h-10 rounded-lg border border-[#ececef] px-4 text-sm font-semibold hover:bg-[#f7f7f8]">
                 취소
               </button>
-              <button type="button" disabled={isPending} onClick={save} className="h-10 rounded-lg bg-leaf-500 px-4 text-sm font-semibold text-white hover:bg-leaf-600 disabled:opacity-50">
+              <button type="button" disabled={isPending} onClick={save} className="h-10 rounded-lg bg-[#a3e635] px-4 text-sm font-extrabold text-[#1a2e05] hover:bg-[#bef264] disabled:opacity-50">
                 {isPending ? "저장 중..." : "저장"}
               </button>
             </div>

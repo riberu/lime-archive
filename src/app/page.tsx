@@ -1,135 +1,174 @@
 import Image from "next/image";
 import Link from "next/link";
-import { ArrowRight, BookOpen, Bot, MessageCircle, PenLine, Sparkles } from "lucide-react";
+import { ChevronRight, Medal, X } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
-import { StoryCard } from "@/components/content-card";
+import { DarkCharacterCard, StoryCard, WideStoryCard } from "@/components/content-card";
 import { getCharacters, getStories } from "@/lib/data";
 import { genreItems, getFeaturedStories } from "@/lib/genres";
 
 export const dynamic = "force-dynamic";
 
-const heroImage = "https://images.unsplash.com/photo-1490730141103-6cac27aaab94?auto=format&fit=crop&w=1600&q=80";
-
-const workflow = [
-  {
-    title: "세계관 선택",
-    description: "추천 스토리와 장르별 작품을 둘러보고 원하는 분위기의 채팅을 엽니다.",
-    icon: BookOpen
-  },
-  {
-    title: "대화 설정 작성",
-    description: "유저 노트에 내 역할, 외모, 기억해야 할 지침을 저장합니다.",
-    icon: PenLine
-  },
-  {
-    title: "GM과 이어가기",
-    description: "시스템 프롬프트와 유저 노트를 합쳐 장면이 멈추지 않도록 이어갑니다.",
-    icon: MessageCircle
-  }
-];
+const fallbackHero = "https://images.unsplash.com/photo-1538485399081-7191377e8241?auto=format&fit=crop&w=1600&q=80";
 
 export default async function HomePage() {
   const [stories, characters] = await Promise.all([getStories(), getCharacters()]);
-  const featuredStories = getFeaturedStories(stories).slice(0, 4);
-  const featuredStory = featuredStories[0];
+  const featuredStories = getFeaturedStories(stories);
+  const heroStory = featuredStories[0];
+  const newStories = stories.slice(0, 8);
+  const rankedStories = featuredStories.slice(0, 8);
 
   return (
     <AppShell>
-      <main className="mx-auto flex w-full max-w-7xl flex-col gap-12 px-5 py-8 md:py-12">
-        <section className="relative isolate min-h-[520px] overflow-hidden rounded-lg bg-[#13200f] px-5 py-10 text-white md:px-10">
-          <Image src={featuredStory?.thumbnailUrl || heroImage} alt="" fill priority className="absolute inset-0 -z-20 object-cover opacity-55" />
-          <div className="absolute inset-0 -z-10 bg-black/35" />
-          <div className="flex min-h-[440px] max-w-3xl flex-col justify-center">
-            <div className="inline-flex w-fit items-center gap-2 rounded-full border border-white/25 bg-white/15 px-3 py-1 text-sm backdrop-blur">
-              <Sparkles size={16} />
-              스토리 롤플레잉 AI 채팅
-            </div>
-            <h1 className="mt-6 text-4xl font-semibold leading-tight md:text-6xl">
-              Lime Archive
-            </h1>
-            <p className="mt-5 max-w-2xl text-base leading-8 text-white/85">
-              세계관, 캐릭터, 유저 노트를 한 번에 엮어 장면이 계속 전개되는 개인 롤플레잉 채팅을 만듭니다.
-              제작자는 긴 폼으로 작품을 만들고, 사용자는 채팅 중에도 대화 설정을 바로 고칠 수 있습니다.
-            </p>
-            <div className="mt-8 flex flex-wrap gap-3">
-              <Link href="/stories" className="inline-flex h-11 items-center gap-2 rounded-lg bg-leaf-500 px-5 font-semibold text-white hover:bg-leaf-600">
-                스토리 탐색 <ArrowRight size={18} />
-              </Link>
-              <Link href="/create/story" className="inline-flex h-11 items-center gap-2 rounded-lg border border-white/30 bg-white/15 px-5 font-semibold text-white backdrop-blur hover:bg-white/25">
-                작품 만들기
-              </Link>
+      <div className="flex min-h-[calc(100dvh-56px)]">
+        <aside className="ui-sidebar sticky top-14 hidden h-[calc(100dvh-56px)] shrink-0 overflow-y-auto px-3 py-4 lg:block">
+          <div className="mb-4 flex gap-1">
+            <button className="relative flex-1 py-2 text-sm font-bold text-[#1f2328] after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:rounded-full after:bg-[#4d6b00]">
+              에피소드
+            </button>
+            <button className="flex-1 py-2 text-sm font-bold text-[#9ca3af]">노트</button>
+          </div>
+          <div className="rounded-xl bg-[#ecfccb] p-4 text-center">
+            <h2 className="text-sm font-bold">아직 보관함이 비어 있어요</h2>
+            <p className="mt-2 text-[11px] leading-5 text-[#6b7280]">스토리를 시작하면 최근 채팅이 이곳에 쌓입니다.</p>
+            <div className="mt-3 flex gap-2">
+              <Link href="/stories" className="flex-1 rounded-lg bg-[#4d6b00] py-2 text-[11px] font-bold text-white">탐색</Link>
+              <Link href="/create/story" className="flex-1 rounded-lg border border-[#ececef] bg-white py-2 text-[11px] font-bold text-[#6b7280]">만들기</Link>
             </div>
           </div>
-        </section>
+        </aside>
 
-        <section className="grid gap-4 md:grid-cols-3">
-          {workflow.map((item) => {
-            const Icon = item.icon;
-            return (
-              <div key={item.title} className="rounded-lg border border-[#e0ead4] bg-white p-5">
-                <div className="grid size-11 place-items-center rounded-lg bg-leaf-50 text-leaf-700">
-                  <Icon size={21} />
+        <main className="min-w-0 flex-1 px-5 py-[18px] pb-16 md:px-7">
+          <div className="mx-auto max-w-[1060px]">
+            <nav className="mb-[18px] flex gap-2 overflow-x-auto pb-1 [scrollbar-width:none]" aria-label="홈 장르">
+              <Link href="/stories" className="ui-chip ui-chip-active">추천</Link>
+              <Link href="/stories#new" className="ui-chip">오늘 신작</Link>
+              <Link href="/stories" className="ui-chip">전체 랭킹</Link>
+              {genreItems.map((genre) => (
+                <Link key={genre.slug} href={`/stories/genre/${genre.slug}`} className="ui-chip">
+                  {genre.label}
+                </Link>
+              ))}
+            </nav>
+
+            <section className="mb-[18px] flex gap-3">
+              <Link href={heroStory ? `/stories/${heroStory.id}` : "/create/story"} className="ui-hero relative flex flex-1 items-end">
+                <Image src={heroStory?.thumbnailUrl || fallbackHero} alt="" fill priority className="absolute inset-0 object-cover" />
+                <div className="ui-hero-grad absolute inset-0" />
+                <span className="absolute right-4 top-3 rounded-full bg-black/40 px-3 py-1 text-[11px]">1 / {Math.max(stories.length, 1)}</span>
+                <div className="relative max-w-[640px] p-6">
+                  <span className="ui-tag-pill mb-3">스토리 추천</span>
+                  <h1 className="mb-2 text-2xl font-extrabold leading-tight md:text-[28px]">
+                    {heroStory?.title || "첫 스토리를 등록해 보세요"}
+                  </h1>
+                  <p className="mb-2 max-w-xl text-sm leading-6 text-[#d7dade]">
+                    {heroStory?.description || "등록된 작품이 아직 없습니다. 긴 폼 제작 페이지에서 세계관과 오프닝을 입력하면 홈에 바로 표시됩니다."}
+                  </p>
+                  <p className="mb-4 text-xs text-[#aeb2b8]">{heroStory?.tags.map((tag) => `#${tag}`).join(" ") || "#첫작품 #라임"}</p>
+                  <span className="inline-flex rounded-lg border border-white/25 bg-white/15 px-4 py-2 text-xs font-semibold">자세히 보기</span>
                 </div>
-                <h2 className="mt-4 font-semibold">{item.title}</h2>
-                <p className="mt-2 text-sm leading-6 text-[#66705f]">{item.description}</p>
-              </div>
-            );
-          })}
-        </section>
-
-        <section className="space-y-5">
-          <div className="flex items-end justify-between gap-4">
-            <div>
-              <p className="text-sm font-medium text-leaf-600">Library</p>
-              <h2 className="mt-1 text-2xl font-semibold">추천 스토리</h2>
-            </div>
-            <Link href="/stories" className="text-sm font-semibold text-leaf-700">전체 보기</Link>
-          </div>
-          <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-4">
-            {featuredStories.map((story) => (
-              <StoryCard key={story.id} story={story} />
-            ))}
-          </div>
-        </section>
-
-        <section className="space-y-5">
-          <div>
-            <p className="text-sm font-medium text-leaf-600">Genres</p>
-            <h2 className="mt-1 text-2xl font-semibold">장르별로 찾기</h2>
-          </div>
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            {genreItems.map((genre) => (
-              <Link key={genre.slug} href={`/stories/genre/${genre.slug}`} className="rounded-lg border border-[#e0ead4] bg-white p-4 hover:border-leaf-400 hover:bg-leaf-50">
-                <span className="font-semibold">{genre.label}</span>
-                <p className="mt-2 text-sm leading-6 text-[#66705f]">이 장르의 스토리를 모아봅니다.</p>
+                <span className="absolute right-4 top-1/2 grid size-[34px] -translate-y-1/2 place-items-center rounded-full bg-white/20">
+                  <ChevronRight size={18} />
+                </span>
               </Link>
-            ))}
-          </div>
-        </section>
+              <div className="hidden w-[92px] shrink-0 flex-col gap-3 md:flex">
+                <div className="flex-1 rounded-[14px] bg-[#e7e8ea]" />
+                <div className="flex-1 rounded-[14px] bg-[#e7e8ea]" />
+              </div>
+            </section>
 
-        <section className="rounded-lg border border-[#e0ead4] bg-white p-6">
-          <div className="flex flex-col gap-5 md:flex-row md:items-center md:justify-between">
-            <div>
-              <p className="text-sm font-medium text-leaf-600">Character Studio</p>
-              <h2 className="mt-1 text-2xl font-semibold">캐릭터를 만들고 스토리에 연결</h2>
-              <p className="mt-2 text-sm leading-6 text-[#66705f]">
-                캐릭터는 독립적으로 관리하고, 스토리 제작 화면에서 등장 인물로 연결할 수 있게 설계했습니다.
-              </p>
+            <section className="mb-4 grid gap-3 md:grid-cols-2">
+              <Link href="/create/story" className="flex items-center justify-between rounded-[14px] bg-[#f7f7f8] px-5 py-[18px]">
+                <div>
+                  <p className="mb-1 text-xs text-[#6b7280]">세계관을 길게 관리하는</p>
+                  <h2 className="text-base font-extrabold text-[#4d6b00]">스토리 제작실</h2>
+                </div>
+                <div className="h-12 w-16 rounded-[10px] bg-[#e7e8ea]" />
+              </Link>
+              <Link href="/create/character" className="flex items-center justify-between rounded-[14px] bg-[#f7f7f8] px-5 py-[18px]">
+                <div>
+                  <p className="mb-1 text-xs text-[#6b7280]">말투와 첫 메시지를 담는</p>
+                  <h2 className="text-base font-extrabold text-[#4d6b00]">캐릭터 제작실</h2>
+                </div>
+                <div className="h-12 w-16 rounded-[10px] bg-[#e7e8ea]" />
+              </Link>
+            </section>
+
+            <Link href="/my" className="mb-4 flex items-center gap-3 rounded-[14px] bg-[#2a2d33] px-5 py-[18px] text-white">
+              <span className="grid size-10 place-items-center rounded-[10px] bg-[#a3e635] text-[#1a2e05]"><Medal size={20} /></span>
+              <span>
+                <span className="block text-[11px] text-[#b9bdc3]">오늘의 미션</span>
+                <span className="block text-[15px] font-extrabold">내 작품 하나 등록하고 DB에 저장하기</span>
+              </span>
+              <ChevronRight className="ml-auto text-[#b9bdc3]" size={18} />
+            </Link>
+
+            <div className="mb-3 flex items-center gap-2 rounded-xl bg-[#ecfccb] px-4 py-3 text-sm font-semibold text-[#3f6212]">
+              라임은 이제 등록된 DB 작품을 홈과 탐색 화면에 표시합니다.
+              <X className="ml-auto text-[#9ca3af]" size={15} />
             </div>
-            <Link href="/create/character" className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-[#dce8d1] px-4 text-sm font-semibold hover:bg-leaf-50">
-              <Bot size={18} /> 캐릭터 만들기
+
+            <Shelf title="취향을 위한 추천" sub="등록된 스토리 중 반응이 좋은 작품">
+              {featuredStories.length ? featuredStories.slice(0, 10).map((story) => <StoryCard key={story.id} story={story} />) : <EmptyShelf />}
+            </Shelf>
+
+            <Shelf title="실시간 랭킹" sub="채팅과 좋아요가 많은 작품">
+              {rankedStories.length ? rankedStories.slice(0, 8).map((story, index) => <WideStoryCard key={story.id} story={story} rank={index + 1} />) : <EmptyShelf />}
+            </Shelf>
+
+            <section className="ui-dark-panel mt-8 px-6 py-6">
+              <div className="mb-5 flex items-end justify-between">
+                <div>
+                  <h2 className="ui-shelf-title text-white">지금 대화할 수 있는 캐릭터</h2>
+                  <p className="ui-shelf-sub mt-1 text-[#9498a1]">말풍선을 눌러 바로 시작해요</p>
+                </div>
+                <Link href="/characters" className="text-sm font-bold text-[#9498a1]">더 보기</Link>
+              </div>
+              <div className="ui-track">
+                {characters.length ? characters.slice(0, 10).map((character) => <DarkCharacterCard key={character.id} character={character} />) : <EmptyDarkShelf />}
+              </div>
+            </section>
+
+            <Shelf title="오늘 올라온 신작" sub="최근 등록된 이야기">
+              {newStories.length ? newStories.map((story) => <StoryCard key={story.id} story={story} />) : <EmptyShelf />}
+            </Shelf>
+
+            <Link href="/stories" className="mt-8 block rounded-xl bg-[#f7f7f8] p-4 text-center text-sm font-bold text-[#6b7280] hover:bg-[#ecfccb] hover:text-[#3f6212]">
+              전체 보기
             </Link>
           </div>
-          <div className="mt-5 grid gap-3 md:grid-cols-2">
-            {characters.slice(0, 2).map((character) => (
-              <Link key={character.id} href={`/characters/${character.id}`} className="rounded-lg bg-[#fbfdf7] p-4 hover:bg-leaf-50">
-                <h3 className="font-semibold">{character.name}</h3>
-                <p className="mt-1 line-clamp-2 text-sm leading-6 text-[#66705f]">{character.description}</p>
-              </Link>
-            ))}
-          </div>
-        </section>
-      </main>
+        </main>
+      </div>
     </AppShell>
+  );
+}
+
+function Shelf({ title, sub, children }: { title: string; sub: string; children: React.ReactNode }) {
+  return (
+    <section className="pt-9">
+      <div className="mb-[18px] flex items-end justify-between">
+        <div>
+          <h2 className="ui-shelf-title">{title}</h2>
+          <p className="ui-shelf-sub mt-1">{sub}</p>
+        </div>
+        <Link href="/stories" className="text-sm font-bold text-[#6b7280] hover:text-[#4d6b00]">더 보기</Link>
+      </div>
+      <div className="ui-track">{children}</div>
+    </section>
+  );
+}
+
+function EmptyShelf() {
+  return (
+    <Link href="/create/story" className="ui-panel-card flex min-h-[160px] min-w-[288px] items-center justify-center px-6 text-center text-sm font-semibold text-[#6b7280]">
+      아직 등록된 작품이 없습니다. 첫 작품을 만들어 주세요.
+    </Link>
+  );
+}
+
+function EmptyDarkShelf() {
+  return (
+    <Link href="/create/character" className="ui-character-card flex min-h-[180px] items-center justify-center p-5 text-center text-sm font-semibold text-[#c9ced6]">
+      아직 등록된 캐릭터가 없습니다.
+    </Link>
   );
 }

@@ -11,6 +11,9 @@ type CharacterPayload = {
   speech_style?: string;
   relationship?: string;
   first_message?: string;
+  intro_scene?: string;
+  memory_rules?: string;
+  response_rules?: string;
   prompt?: string;
   storyId?: string;
   visibility?: "public" | "private";
@@ -62,9 +65,12 @@ function normalizeCharacter(body: CharacterPayload): Character {
     clean(body.prompt) ||
     [
       `Character name: ${name}`,
+      `Intro scene: ${clean(body.intro_scene)}`,
       `Personality: ${clean(body.personality)}`,
       `Speech style: ${clean(body.speech_style)}`,
-      relationship ? `Relationship memory: ${relationship}` : ""
+      relationship ? `Relationship memory: ${relationship}` : "",
+      `Memory rules: ${clean(body.memory_rules)}`,
+      `Response rules: ${clean(body.response_rules)}`
     ]
       .filter(Boolean)
       .join("\n");

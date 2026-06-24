@@ -8,12 +8,21 @@ type StoryPayload = {
   description?: string;
   tags?: string | string[];
   thumbnail_url?: string;
+  category?: string;
+  prompt_template?: string;
   world?: string;
   ai_rules?: string;
   characters?: string;
   opening_message?: string;
   current_scene?: string;
   status_text?: string;
+  style_tone?: string;
+  forbidden_rules?: string;
+  media_notes?: string;
+  storyboard?: string;
+  example_dialogues?: string;
+  ending_rules?: string;
+  rating_note?: string;
   system_prompt?: string;
   visibility?: "public" | "private";
   creatorId?: string;
@@ -59,12 +68,10 @@ export async function POST(request: Request) {
 
 function normalizeStory(body: StoryPayload): Story {
   const title = clean(body.title) || "Untitled story";
-  const world = clean(body.world);
-  const aiRules = clean(body.ai_rules);
-  const characters = clean(body.characters);
+  const assembledPrompt = buildSystemPrompt(body);
   const systemPrompt =
     clean(body.system_prompt) ||
-    ["# World", world, "# AI Rules", aiRules, "# Characters", characters].filter(Boolean).join("\n\n");
+    assembledPrompt;
 
   return {
     id: slugId("story"),
@@ -76,7 +83,7 @@ function normalizeStory(body: StoryPayload): Story {
     openingMessage: clean(body.opening_message) || `${title} begins in a quiet scene.`,
     currentScene: clean(body.current_scene) || "The first scene is about to begin.",
     statusText: clean(body.status_text) || "#001 | Start",
-    tags: parseTags(body.tags),
+    tags: parseTags(body.tags, body.category),
     visibility: body.visibility ?? "private",
     likeCount: 0,
     chatCount: 0,
@@ -84,18 +91,40 @@ function normalizeStory(body: StoryPayload): Story {
   };
 }
 
-function parseTags(value?: string | string[]) {
+function parseTags(value?: string | string[], category?: string) {
+  const categoryTag = clean(category);
   if (Array.isArray(value)) {
-    return value.map((tag) => tag.trim()).filter(Boolean).slice(0, 10);
+    return [categoryTag, ...value.map((tag) => tag.trim())].filter(Boolean).slice(0, 10);
   }
 
-  return (value ?? "")
+  return [categoryTag, ...(value ?? "")
     .split(",")
     .map((tag) => tag.trim())
-    .filter(Boolean)
+    .filter(Boolean)]
     .slice(0, 10);
 }
 
 function clean(value?: FormDataEntryValue | string) {
   return typeof value === "string" ? value.trim() : "";
+}
+
+function buildSystemPrompt(body: StoryPayload) {
+  const sections = [
+    ["# Prompt Template", clean(body.prompt_template)],
+    ["# World", clean(body.world)],
+    ["# AI Rules", clean(body.ai_rules)],
+    ["# Characters", clean(body.characters)],
+    ["# Style Tone", clean(body.style_tone)],
+    ["# Forbidden Rules", clean(body.forbidden_rules)],
+    ["# Media Notes", clean(body.media_notes)],
+    ["# Storyboard", clean(body.storyboard)],
+    ["# Example Dialogues", clean(body.example_dialogues)],
+    ["# Ending Rules", clean(body.ending_rules)],
+    ["# Rating / Operation Note", clean(body.rating_note)]
+  ];
+
+  return sections
+    .filter(([, content]) => content)
+    .map(([title, content]) => `${title}\n${content}`)
+    .join("\n\n");
 }

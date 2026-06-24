@@ -37,6 +37,11 @@ export async function POST(request: Request) {
   const extension = getExtension(file);
   const path = `${usage}/${new Date().toISOString().slice(0, 10)}/${crypto.randomUUID()}.${extension}`;
 
+  const bucketError = await ensureStoryAssetsBucket(supabase);
+  if (bucketError) {
+    return NextResponse.json({ error: bucketError }, { status: 502 });
+  }
+
   const { error } = await supabase.storage.from("story-assets").upload(path, bytes, {
     contentType: file.type,
     cacheControl: "31536000",
@@ -70,4 +75,24 @@ function getExtension(file: File) {
   if (file.type === "image/webp") return "webp";
   if (file.type === "image/gif") return "gif";
   return "jpg";
+}
+
+async function ensureStoryAssetsBucket(supabase: NonNullable<ReturnType<typeof getSupabaseServerClient>>) {
+  const { data: buckets, error: listError } = await supabase.storage.listBuckets();
+
+  if (listError) {
+    return listError.message;
+  }
+
+  if (buckets?.some((bucket) => bucket.id === "story-assets")) {
+    return null;
+  }
+
+  const { error: createError } = await supabase.storage.createBucket("story-assets", {
+    public: true,
+    fileSizeLimit: maxUploadSize,
+    allowedMimeTypes: Array.from(allowedMimeTypes)
+  });
+
+  return createError?.message ?? null;
 }

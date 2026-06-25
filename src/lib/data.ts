@@ -58,11 +58,16 @@ export async function getStories() {
   const supabase = getSupabaseServerClient();
   if (!supabase) return [];
 
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from("stories")
     .select("*")
     .order("created_at", { ascending: false })
     .returns<StoryRow[]>();
+
+  if (error) {
+    console.error("Failed to load stories from Supabase", error);
+    return [];
+  }
 
   return data?.map(mapStory) ?? [];
 }

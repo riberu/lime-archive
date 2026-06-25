@@ -1,7 +1,7 @@
 import Link from "next/link";
-import { Compass, Plus, Sparkles } from "lucide-react";
+import { Plus } from "lucide-react";
 import { WorkspaceLayout } from "@/components/app-shell";
-import { StoryCard } from "@/components/content-card";
+import { StoryCard, WideStoryCard } from "@/components/content-card";
 import { getStories } from "@/lib/data";
 import { genreItems, getFeaturedStories } from "@/lib/genres";
 
@@ -10,62 +10,72 @@ export const dynamic = "force-dynamic";
 export default async function StoriesPage() {
   const stories = await getStories();
   const featuredStories = getFeaturedStories(stories);
-  const newStories = stories.slice(0, 8);
+  const rankedStories = [...stories].sort((a, b) => b.chatCount + b.likeCount - (a.chatCount + a.likeCount)).slice(0, 12);
 
   return (
     <WorkspaceLayout>
-      <section className="mx-auto flex w-full max-w-6xl flex-col gap-8 px-5 py-8">
-        <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+      <section className="wrap pb-16">
+        <div className="list-top">
           <div>
-            <p className="text-sm font-bold text-[#4d6b00]">Story Library</p>
-            <h1 className="mt-2 font-story text-3xl font-extrabold tracking-tight">스토리 탐색</h1>
-            <p className="mt-2 text-[#6b7280]">추천작, 신작, 장르별 목록에서 바로 롤플레잉 채팅을 시작하세요.</p>
+            <h1>스토리</h1>
+            <div className="sub">장르를 골라 그 세계의 추천작을 만나보세요.</div>
           </div>
-          <Link href="/create/story" className="inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-[#a3e635] px-4 text-sm font-extrabold text-[#1a2e05] hover:bg-[#bef264]">
-            <Plus size={18} /> 스토리 만들기
+          <Link href="/create/story" className="btn btn-primary">
+            <Plus size={16} /> 스토리 만들기
           </Link>
         </div>
 
-        <nav className="flex gap-2 overflow-x-auto pb-1" aria-label="스토리 탐색 필터">
-          <Link href="/stories" className="ui-chip ui-chip-active inline-flex items-center gap-2">
-            <Sparkles size={15} /> 추천
+        <nav className="gchips" aria-label="스토리 장르">
+          <Link href="/stories" className="gchip on">
+            전체
           </Link>
-          <a href="#new" className="ui-chip inline-flex items-center">신작</a>
           {genreItems.map((genre) => (
-            <Link key={genre.slug} href={`/stories/genre/${genre.slug}`} className="ui-chip inline-flex items-center">
+            <Link key={genre.slug} href={`/stories/genre/${genre.slug}`} className="gchip">
               {genre.label}
             </Link>
           ))}
         </nav>
 
-        <section className="space-y-4">
-          <div className="flex items-center gap-2">
-            <span className="ui-icon-btn ui-icon-btn-active"><Sparkles size={18} /></span>
-            <h2 className="ui-shelf-title">추천 스토리</h2>
+        <section className="shelf">
+          <div className="shelf-head">
+            <h2>인기 스토리</h2>
+            <span className="more">더 보기</span>
           </div>
-          <div className="ui-track">
-            {featuredStories.length ? featuredStories.map((story) => <StoryCard key={story.id} story={story} />) : <EmptyState href="/create/story" label="아직 등록된 스토리가 없습니다." />}
-          </div>
+          <div className="track">{featuredStories.length ? featuredStories.map((story) => <StoryCard key={story.id} story={story} />) : <EmptyState />}</div>
         </section>
 
-        <section id="new" className="space-y-4 scroll-mt-20">
-          <div className="flex items-center gap-2">
-            <span className="ui-icon-btn"><Compass size={18} /></span>
-            <h2 className="ui-shelf-title">신작</h2>
+        <section className="shelf">
+          <div className="shelf-head">
+            <h2>추천 스토리 베스트</h2>
           </div>
-          <div className="ui-track">
-            {newStories.length ? newStories.map((story) => <StoryCard key={story.id} story={story} />) : <EmptyState href="/create/story" label="첫 스토리를 만들어 주세요." />}
+          <div className="best-list">{rankedStories.length ? rankedStories.map((story, index) => <WideStoryCard key={story.id} story={story} rank={index + 1} />) : <EmptyLine />}</div>
+        </section>
+
+        <section className="shelf">
+          <div className="shelf-head">
+            <h2>전체 스토리</h2>
+            <select className="sortsel" id="story-sort" name="story_sort" defaultValue="popular">
+              <option value="popular">인기순</option>
+              <option value="chats">채팅순</option>
+              <option value="new">신규순</option>
+              <option value="name">가나다순</option>
+            </select>
           </div>
+          <div className="grid-cards">{stories.length ? stories.map((story) => <StoryCard key={story.id} story={story} />) : <EmptyState />}</div>
         </section>
       </section>
     </WorkspaceLayout>
   );
 }
 
-function EmptyState({ href, label }: { href: string; label: string }) {
+function EmptyState() {
   return (
-    <Link href={href} className="ui-panel-card flex min-h-[160px] min-w-[288px] items-center justify-center px-6 text-center text-sm font-semibold text-[#6b7280]">
-      {label}
+    <Link href="/create/story" className="empty-card">
+      아직 등록된 스토리가 없어요. 첫 스토리를 만들어 주세요.
     </Link>
   );
+}
+
+function EmptyLine() {
+  return <p className="empty-line">아직 순위를 만들 작품이 없어요.</p>;
 }

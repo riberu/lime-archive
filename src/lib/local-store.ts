@@ -25,3 +25,8 @@ export function nowIso() {
 export function slugId(prefix: string) {
   return `${prefix}-${crypto.randomUUID()}`;
 }
+
+export function clearLocalStore() {
+  localStore.sessions = [];
+  localStore.messages = [];
+}

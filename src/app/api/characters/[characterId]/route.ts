@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { getUserFromRequest } from "@/lib/auth";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
 import { localStore } from "@/lib/local-store";
 
@@ -23,6 +24,7 @@ export async function PATCH(request: Request, context: RouteContext) {
   const body = (await request.json()) as CharacterUpdatePayload;
   const payload = normalizePayload(body);
   const supabase = getSupabaseServerClient();
+  const user = await getUserFromRequest(request);
 
   if (!supabase) {
     const character = localStore.characters.find((item) => item.id === characterId);
@@ -41,10 +43,13 @@ export async function PATCH(request: Request, context: RouteContext) {
     return NextResponse.json(character);
   }
 
+  if (!user) return NextResponse.json({ error: "로그인이 필요합니다." }, { status: 401 });
+
   const { data, error } = await supabase
     .from("characters")
     .update({ ...payload, updated_at: new Date().toISOString() })
     .eq("id", characterId)
+    .eq("creator_id", user.id)
     .select("id")
     .single<{ id: string }>();
 
@@ -52,9 +57,10 @@ export async function PATCH(request: Request, context: RouteContext) {
   return NextResponse.json(data);
 }
 
-export async function DELETE(_request: Request, context: RouteContext) {
+export async function DELETE(request: Request, context: RouteContext) {
   const { characterId } = await context.params;
   const supabase = getSupabaseServerClient();
+  const user = await getUserFromRequest(request);
 
   if (!supabase) {
     const index = localStore.characters.findIndex((item) => item.id === characterId);
@@ -62,8 +68,11 @@ export async function DELETE(_request: Request, context: RouteContext) {
     return NextResponse.json({ id: characterId });
   }
 
-  const { error } = await supabase.from("characters").delete().eq("id", characterId);
+  if (!user) return NextResponse.json({ error: "로그인이 필요합니다." }, { status: 401 });
+
+  const { data, error } = await supabase.from("characters").delete().eq("id", characterId).eq("creator_id", user.id).select("id");
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (!data?.length) return NextResponse.json({ error: "삭제할 수 있는 작품을 찾지 못했어요." }, { status: 404 });
   return NextResponse.json({ id: characterId });
 }
 

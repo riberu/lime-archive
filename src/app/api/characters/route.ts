@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
+import { getUserFromRequest } from "@/lib/auth";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
+import { getCharacters } from "@/lib/data";
 import { localStore, slugId } from "@/lib/local-store";
 import type { Character } from "@/lib/types";
 
@@ -9,6 +11,7 @@ type CharacterPayload = {
   avatar_url?: string;
   personality?: string;
   speech_style?: string;
+  character_tags?: string;
   relationship?: string;
   first_message?: string;
   intro_scene?: string;
@@ -21,23 +24,32 @@ type CharacterPayload = {
 };
 
 export async function GET() {
-  return NextResponse.json({ characters: localStore.characters });
+  const characters = await getCharacters();
+  return NextResponse.json({ characters });
 }
 
 export async function POST(request: Request) {
-  const body = (await request.json()) as CharacterPayload;
+  const isJson = request.headers.get("content-type")?.includes("application/json") ?? false;
+  const body = isJson ? ((await request.json()) as CharacterPayload) : formDataToCharacterPayload(await request.formData());
   const character = normalizeCharacter(body);
   const supabase = getSupabaseServerClient();
+  const user = await getUserFromRequest(request);
 
   if (!supabase) {
     localStore.characters.unshift(character);
+    if (!isJson) return NextResponse.redirect(new URL(`/characters/${character.id}`, request.url));
     return NextResponse.json(character);
+  }
+
+  if (!user) {
+    if (!isJson) return NextResponse.redirect(new URL("/signup", request.url));
+    return NextResponse.json({ error: "로그인이 필요합니다." }, { status: 401 });
   }
 
   const { data, error } = await supabase
     .from("characters")
     .insert({
-      creator_id: body.creatorId ?? process.env.APP_DEMO_USER_ID ?? null,
+      creator_id: user.id,
       story_id: body.storyId || null,
       name: character.name,
       description: character.description,
@@ -55,7 +67,27 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
+  if (!isJson) return NextResponse.redirect(new URL(`/characters/${data.id}`, request.url));
   return NextResponse.json({ ...character, id: data.id });
+}
+
+function formDataToCharacterPayload(formData: FormData): CharacterPayload {
+  return {
+    name: clean(formData.get("name")),
+    description: clean(formData.get("description")),
+    avatar_url: clean(formData.get("avatar_url")),
+    personality: clean(formData.get("personality")),
+    speech_style: clean(formData.get("speech_style")),
+    character_tags: clean(formData.get("character_tags")),
+    relationship: clean(formData.get("relationship")),
+    first_message: clean(formData.get("first_message")),
+    intro_scene: clean(formData.get("intro_scene")),
+    memory_rules: clean(formData.get("memory_rules")),
+    response_rules: clean(formData.get("response_rules")),
+    prompt: clean(formData.get("prompt")),
+    storyId: clean(formData.get("storyId")),
+    visibility: formData.get("visibility") === "public" ? "public" : "private"
+  };
 }
 
 function normalizeCharacter(body: CharacterPayload): Character {
@@ -65,6 +97,7 @@ function normalizeCharacter(body: CharacterPayload): Character {
     clean(body.prompt) ||
     [
       `Character name: ${name}`,
+      `Character tags: ${clean(body.character_tags)}`,
       `Intro scene: ${clean(body.intro_scene)}`,
       `Personality: ${clean(body.personality)}`,
       `Speech style: ${clean(body.speech_style)}`,
@@ -90,6 +123,6 @@ function normalizeCharacter(body: CharacterPayload): Character {
   };
 }
 
-function clean(value?: FormDataEntryValue | string) {
+function clean(value?: FormDataEntryValue | string | null) {
   return typeof value === "string" ? value.trim() : "";
 }

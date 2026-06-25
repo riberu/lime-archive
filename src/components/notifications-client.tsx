@@ -28,22 +28,27 @@ export function NotificationsClient() {
   }, []);
 
   if (loading) {
-    return <div className="ui-panel-card p-8 text-center text-sm font-semibold text-[#6b7280]">알림을 불러오는 중입니다.</div>;
+    return <div className="empty-card">알림을 불러오는 중입니다.</div>;
+  }
+
+  if (!items.length) {
+    return <div className="empty-card">아직 새 알림이 없어요.</div>;
   }
 
   return (
-    <div className="space-y-3">
+    <div className="set-group">
+      <div className="gt">최근 알림</div>
       {items.map((item) => {
         const Icon = item.category === "attendance" ? CalendarCheck : item.category === "notice" ? Megaphone : Bell;
         const body = (
-          <div className="ui-panel-card flex gap-4 p-4 hover:bg-[#f7f7f8]">
+          <div className="set-row items-start">
             <span className="ui-icon-btn ui-icon-btn-active shrink-0">
               <Icon size={17} />
             </span>
-            <span>
+            <span className="min-w-0 flex-1">
               <span className="block font-bold">{item.title}</span>
-              <span className="mt-1 block text-sm leading-6 text-[#6b7280]">{item.body}</span>
-              <span className="mt-2 block text-xs text-[#9ca3af]">{new Date(item.createdAt).toLocaleString("ko-KR")}</span>
+              <span className="mt-1 block text-sm leading-6 text-[var(--ink-soft)]">{item.body}</span>
+              <span className="mt-2 block text-xs text-[var(--ink-faint)]">{new Date(item.createdAt).toLocaleString("ko-KR")}</span>
             </span>
           </div>
         );

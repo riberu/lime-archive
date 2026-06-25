@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { getUserFromRequest } from "@/lib/auth";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
 import { localStore } from "@/lib/local-store";
 
@@ -23,6 +24,7 @@ export async function PATCH(request: Request, context: RouteContext) {
   const body = (await request.json()) as StoryUpdatePayload;
   const payload = normalizePayload(body);
   const supabase = getSupabaseServerClient();
+  const user = await getUserFromRequest(request);
 
   if (!supabase) {
     const story = localStore.stories.find((item) => item.id === storyId);
@@ -41,10 +43,13 @@ export async function PATCH(request: Request, context: RouteContext) {
     return NextResponse.json(story);
   }
 
+  if (!user) return NextResponse.json({ error: "로그인이 필요합니다." }, { status: 401 });
+
   const { data, error } = await supabase
     .from("stories")
     .update({ ...payload, updated_at: new Date().toISOString() })
     .eq("id", storyId)
+    .eq("creator_id", user.id)
     .select("id")
     .single<{ id: string }>();
 
@@ -52,9 +57,10 @@ export async function PATCH(request: Request, context: RouteContext) {
   return NextResponse.json(data);
 }
 
-export async function DELETE(_request: Request, context: RouteContext) {
+export async function DELETE(request: Request, context: RouteContext) {
   const { storyId } = await context.params;
   const supabase = getSupabaseServerClient();
+  const user = await getUserFromRequest(request);
 
   if (!supabase) {
     const index = localStore.stories.findIndex((item) => item.id === storyId);
@@ -62,8 +68,11 @@ export async function DELETE(_request: Request, context: RouteContext) {
     return NextResponse.json({ id: storyId });
   }
 
-  const { error } = await supabase.from("stories").delete().eq("id", storyId);
+  if (!user) return NextResponse.json({ error: "로그인이 필요합니다." }, { status: 401 });
+
+  const { data, error } = await supabase.from("stories").delete().eq("id", storyId).eq("creator_id", user.id).select("id");
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (!data?.length) return NextResponse.json({ error: "삭제할 수 있는 작품을 찾지 못했어요." }, { status: 404 });
   return NextResponse.json({ id: storyId });
 }
 

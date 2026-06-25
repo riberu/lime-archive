@@ -23,7 +23,15 @@ const filters: Array<{ value: Filter; label: string }> = [
   { value: "private", label: "비공개" }
 ];
 
-export function MyWorksManager({ items }: { items: WorkItem[] }) {
+export function MyWorksManager({
+  items,
+  authToken,
+  onDeleted
+}: {
+  items: WorkItem[];
+  authToken?: string;
+  onDeleted?: (items: WorkItem[]) => void;
+}) {
   const router = useRouter();
   const [filter, setFilter] = useState<Filter>("all");
   const [selected, setSelected] = useState<string[]>([]);
@@ -61,100 +69,80 @@ export function MyWorksManager({ items }: { items: WorkItem[] }) {
     setError("");
     startTransition(async () => {
       const results = await Promise.all(
-        targets.map((item) =>
-          fetch(`/api/${item.type === "story" ? "stories" : "characters"}/${item.id}`, {
-            method: "DELETE"
-          })
-        )
+        targets.map(async (item) => {
+          const response = await fetch(`/api/${item.type === "story" ? "stories" : "characters"}/${item.id}`, {
+            method: "DELETE",
+            headers: authToken ? { Authorization: `Bearer ${authToken}` } : undefined
+          });
+          return { item, response };
+        })
       );
 
-      const failed = results.find((response) => !response.ok);
+      const failed = results.find(({ response }) => !response.ok);
       if (failed) {
-        setError("일부 작품을 삭제하지 못했습니다. 잠시 뒤 다시 시도해 주세요.");
+        const payload = (await failed.response.json().catch(() => ({}))) as { error?: string };
+        setError(payload.error ?? "일부 작품을 삭제하지 못했어요. 잠시 뒤 다시 시도해 주세요.");
         return;
       }
 
       setSelected([]);
+      onDeleted?.(targets);
       router.refresh();
     });
   };
 
   return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap items-center gap-2">
+    <div>
+      <div className="work-tabs">
         {filters.map((item) => (
-          <button
-            key={item.value}
-            type="button"
-            onClick={() => setFilter(item.value)}
-            className={`ui-chip ${filter === item.value ? "ui-chip-active" : ""}`}
-          >
+          <button key={item.value} type="button" onClick={() => setFilter(item.value)} className={filter === item.value ? "on" : ""}>
             {item.label}
           </button>
         ))}
-        <button
-          type="button"
-          disabled={!selected.length || isPending}
-          onClick={deleteSelected}
-          className="ml-auto inline-flex h-9 items-center gap-2 rounded-full border border-red-200 bg-white px-4 text-sm font-semibold text-red-600 disabled:cursor-not-allowed disabled:opacity-40"
-        >
-          <Trash2 size={16} /> 선택 삭제
+        <button type="button" disabled={!selected.length || isPending} onClick={deleteSelected} className="danger-tab">
+          <Trash2 size={14} /> 선택 삭제
         </button>
       </div>
 
-      {error ? <p className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p> : null}
+      {error ? <p className="mb-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p> : null}
 
-      <div className="ui-panel-card overflow-hidden">
-        <div className="grid gap-3 border-b border-[#ececef] bg-[#f7f7f8] p-4 text-sm font-bold text-[#6b7280] md:grid-cols-[40px_100px_1fr_auto] md:items-center">
-          <input
-            id="select-all-works"
-            name="select_all_works"
-            type="checkbox"
-            checked={allVisibleSelected}
-            onChange={toggleAllVisible}
-            className="size-4 accent-[#a3e635]"
-            aria-label="현재 목록 전체 선택"
-          />
-          <span>종류</span>
-          <span>작품</span>
-          <span className="hidden md:block">관리</span>
-        </div>
+      <label className="mb-2 flex items-center gap-2 text-sm font-bold text-[var(--ink-soft)]">
+        <input id="select-all-works" name="select_all_works" type="checkbox" checked={allVisibleSelected} onChange={toggleAllVisible} className="accent-[#a3e635]" />
+        현재 목록 전체 선택
+      </label>
 
+      <div id="work-list">
         {visibleItems.length ? (
           visibleItems.map((item) => {
             const key = itemKey(item);
             return (
-              <div key={key} className="grid gap-3 border-b border-[#ececef] p-4 last:border-b-0 md:grid-cols-[40px_100px_1fr_auto] md:items-center">
+              <article key={key} className="work">
                 <input
                   id={`select-${key}`}
                   name="selected_works"
                   type="checkbox"
                   checked={selected.includes(key)}
                   onChange={() => toggleOne(item)}
-                  className="size-4 accent-[#a3e635]"
+                  className="accent-[#a3e635]"
                   aria-label={`${item.title} 선택`}
                 />
-                <span className="w-fit rounded-md bg-[#ecfccb] px-3 py-1 text-xs font-extrabold text-[#4d6b00]">
-                  {item.type === "story" ? "스토리" : "캐릭터"}
-                </span>
-                <div>
-                  <h3 className="font-semibold">{item.title}</h3>
-                  <p className="mt-1 line-clamp-1 text-sm text-[#6b7280]">{item.description}</p>
-                  <p className="mt-1 text-xs text-[#9ca3af]">{item.visibility === "public" ? "공개" : "비공개"}</p>
+                <div className="cv ph" />
+                <div className="wi">
+                  <div className="t">{item.title}</div>
+                  <div className="m">{item.description}</div>
                 </div>
-                <div className="flex flex-wrap gap-2">
-                  <Link href={`/edit/${item.type}/${item.id}`} className="ui-icon-btn border border-[#ececef]" title="수정">
-                    <Edit3 size={16} />
-                  </Link>
-                  <button type="button" className="ui-icon-btn border border-[#ececef]" title="공유">
-                    <Share2 size={16} />
-                  </button>
-                </div>
-              </div>
+                <span className={`st ${item.visibility === "public" ? "pub" : "draft"}`}>{item.visibility === "public" ? "공개" : "비공개"}</span>
+                <Link href={`/edit/${item.type}/${item.id}`} className="manage">
+                  <Edit3 size={15} /> 수정
+                </Link>
+                <button type="button" className="manage" onClick={() => navigator.clipboard?.writeText(`${location.origin}/${item.type === "story" ? "stories" : "characters"}/${item.id}`)}>
+                  <Share2 size={15} /> 공유
+                </button>
+              </article>
             );
           })
         ) : (
-          <div className="p-8 text-center text-sm text-[#6b7280]">조건에 맞는 작품이 없습니다.</div>
+          <div className="empty-card">조건에 맞는 작품이 없어요.</div>
         )}
       </div>
     </div>

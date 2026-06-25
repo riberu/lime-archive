@@ -62,6 +62,7 @@ export async function POST(request: Request) {
 }
 
 function normalizeUsage(value: FormDataEntryValue | null) {
+  if (value === "profile") return "profiles";
   return value === "character" ? "characters" : "stories";
 }
 

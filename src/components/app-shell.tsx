@@ -5,7 +5,7 @@ import { LimeFloatingChat, ThemeToggle } from "@/components/lime-client-shell";
 const navItems = [
   { href: "/stories", label: "스토리", icon: BookOpen },
   { href: "/characters", label: "캐릭터", icon: Bot },
-  { href: "/my", label: "내 작품", icon: FolderKanban },
+  { href: "/my", label: "보관함", icon: FolderKanban },
   { href: "/profile", label: "내 정보", icon: UserRound }
 ];
 

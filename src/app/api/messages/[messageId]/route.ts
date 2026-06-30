@@ -44,18 +44,6 @@ export async function PATCH(request: Request, { params }: MessageRouteParams) {
     return NextResponse.json({ error: readError.message }, { status: 404 });
   }
 
-  if (body.truncateAfter) {
-    const { error: deleteError } = await supabase
-      .from("chat_messages")
-      .delete()
-      .eq("session_id", current.session_id)
-      .gt("created_at", current.created_at);
-
-    if (deleteError) {
-      return NextResponse.json({ error: deleteError.message }, { status: 500 });
-    }
-  }
-
   const { data, error } = await supabase
     .from("chat_messages")
     .update({ content })
@@ -65,6 +53,18 @@ export async function PATCH(request: Request, { params }: MessageRouteParams) {
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+
+  if (body.truncateAfter) {
+    const { error: deleteError } = await supabase
+      .from("chat_messages")
+      .delete()
+      .eq("session_id", current.session_id)
+      .gt("created_at", current.created_at);
+
+    if (deleteError) {
+      return NextResponse.json({ error: deleteError.message, message: data }, { status: 500 });
+    }
   }
 
   return NextResponse.json({ message: data });

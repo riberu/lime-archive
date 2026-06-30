@@ -8,6 +8,8 @@ import type { Character } from "@/lib/types";
 type CharacterPayload = {
   name?: string;
   description?: string;
+  gender?: string;
+  age?: string;
   avatar_url?: string;
   personality?: string;
   speech_style?: string;
@@ -19,6 +21,8 @@ type CharacterPayload = {
   response_rules?: string;
   prompt?: string;
   storyId?: string;
+  worldId?: string;
+  scope?: "independent" | "world";
   visibility?: "public" | "private";
   creatorId?: string;
 };
@@ -51,8 +55,13 @@ export async function POST(request: Request) {
     .insert({
       creator_id: user.id,
       story_id: body.storyId || null,
+      world_id: body.worldId || null,
+      scope: body.scope === "world" ? "world" : "independent",
+      is_enabled: true,
       name: character.name,
       description: character.description,
+      gender: character.gender,
+      age: character.age,
       avatar_url: character.avatarUrl,
       personality: character.personality,
       speech_style: character.speechStyle,
@@ -75,6 +84,8 @@ function formDataToCharacterPayload(formData: FormData): CharacterPayload {
   return {
     name: clean(formData.get("name")),
     description: clean(formData.get("description")),
+    gender: clean(formData.get("gender")),
+    age: clean(formData.get("age")),
     avatar_url: clean(formData.get("avatar_url")),
     personality: clean(formData.get("personality")),
     speech_style: clean(formData.get("speech_style")),
@@ -86,6 +97,8 @@ function formDataToCharacterPayload(formData: FormData): CharacterPayload {
     response_rules: clean(formData.get("response_rules")),
     prompt: clean(formData.get("prompt")),
     storyId: clean(formData.get("storyId")),
+    worldId: clean(formData.get("worldId")),
+    scope: formData.get("scope") === "world" ? "world" : "independent",
     visibility: formData.get("visibility") === "public" ? "public" : "private"
   };
 }
@@ -97,6 +110,8 @@ function normalizeCharacter(body: CharacterPayload): Character {
     clean(body.prompt) ||
     [
       `Character name: ${name}`,
+      `Gender: ${clean(body.gender)}`,
+      `Age: ${clean(body.age)}`,
       `Character tags: ${clean(body.character_tags)}`,
       `Intro scene: ${clean(body.intro_scene)}`,
       `Personality: ${clean(body.personality)}`,
@@ -112,8 +127,13 @@ function normalizeCharacter(body: CharacterPayload): Character {
     id: slugId("character"),
     creatorId: body.creatorId ?? "local-user",
     storyId: body.storyId || undefined,
+    worldId: body.worldId || undefined,
+    scope: body.scope === "world" ? "world" : "independent",
+    isEnabled: true,
     name,
     description: clean(body.description) || "No description yet.",
+    gender: clean(body.gender),
+    age: clean(body.age),
     avatarUrl: clean(body.avatar_url) || "https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=600&q=80",
     personality: clean(body.personality),
     speechStyle: clean(body.speech_style),

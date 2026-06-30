@@ -29,7 +29,7 @@ import {
   Type,
   X
 } from "lucide-react";
-import type { ChatMessage, ChatSession, Story } from "@/lib/types";
+import type { ChatMessage, ChatSession, MemoryEntry, MemoryEntryType, Story } from "@/lib/types";
 import {
   createBlankPersona,
   formatPersonaForPrompt,
@@ -43,7 +43,7 @@ import {
 import { defaultGeminiModelId, geminiModels, type GeminiModelId } from "@/lib/gemini-models";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 
-const outputLengthSteps = [700, 900, 1100, 1300, 1500, 1800];
+const outputLengthSteps = [1100, 1300, 1500, 1800, 2200, 2600];
 
 type SuggestedReply = {
   text: string;
@@ -55,6 +55,9 @@ const fallbackSuggestions: SuggestedReply[] = [
   { text: "*곧장 대답하지 않고 상대의 의도를 먼저 확인한다* 저를 찾아온 이유부터 말해 주세요.", kind: "combo" },
   { text: "*상대가 내민 신분증으로 시선을 내린다* 이게 진짜라는 걸 어떻게 믿죠?", kind: "combo" }
 ];
+
+const suggestionMarker = "[[SUGGESTIONS]]";
+const eventPlanMarker = "[[EVENT_PLAN]]";
 
 export function ChatRoom({
   initialMessages,
@@ -73,18 +76,17 @@ export function ChatRoom({
   const [personasLoaded, setPersonasLoaded] = useState(false);
   const [authToken, setAuthToken] = useState("");
   const [memorySummary, setMemorySummary] = useState(session.memorySummary);
-  const [outputLength, setOutputLength] = useState(1100);
+  const [outputLength, setOutputLength] = useState(1500);
   const [selectedModelId, setSelectedModelId] = useState<GeminiModelId>(defaultGeminiModelId);
   const [panelOpen, setPanelOpen] = useState(false);
   const [guideOpen, setGuideOpen] = useState(false);
   const [infoOpen, setInfoOpen] = useState(false);
   const [suggestOpen, setSuggestOpen] = useState(false);
-  const [suggestions, setSuggestions] = useState<SuggestedReply[]>(fallbackSuggestions);
-  const [suggestLoading, setSuggestLoading] = useState(false);
   const [streaming, setStreaming] = useState(false);
   const [messageMenuId, setMessageMenuId] = useState<string | null>(null);
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
   const [editDraft, setEditDraft] = useState("");
+  const [editError, setEditError] = useState("");
   const [dress, setDress] = useState({ font: "maru", theme: "paper", brightness: 100 });
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const scrollRef = useRef<HTMLElement>(null);
@@ -254,6 +256,8 @@ export function ChatRoom({
           memorySummary,
           outputLength,
           modelId: selectedModelId,
+          userMessageId: shouldAppendUser ? userMessage.id : undefined,
+          assistantMessageId: options?.replaceMessageId ? undefined : assistantMessage.id,
           persistUser: options?.persistUser,
           replaceMessageId: options?.replaceMessageId,
           messages: history
@@ -382,6 +386,7 @@ export function ChatRoom({
   const beginEditMessage = (message: ChatMessage) => {
     setEditingMessageId(message.id);
     setEditDraft(message.content);
+    setEditError("");
     setMessageMenuId(null);
   };
 
@@ -395,10 +400,15 @@ export function ChatRoom({
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ content, truncateAfter: true })
     });
-    if (!response.ok) return;
+    if (!response.ok) {
+      const payload = (await response.json().catch(() => null)) as { error?: string } | null;
+      setEditError(payload?.error ?? "메시지를 저장하지 못했어요. 새로고침 후 다시 시도해 주세요.");
+      return;
+    }
     setMessages((current) => [...current.slice(0, index), { ...message, content }]);
     setEditingMessageId(null);
     setEditDraft("");
+    setEditError("");
   };
 
   const triggerTimeSkip = () => {
@@ -418,37 +428,6 @@ export function ChatRoom({
     setGuideOpen((current) => !current);
     setInfoOpen(false);
   };
-
-  const loadSuggestions = async () => {
-    setSuggestLoading(true);
-    setSuggestions([]);
-    try {
-      const response = await fetch("/api/chat/suggestions", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          sessionId: session.id,
-          storyId: story.id,
-          protagonistName: selectedPersona?.name.trim() || "",
-          userNote: effectiveUserNote,
-          memorySummary,
-          modelId: selectedModelId,
-          messages: messages.slice(-12)
-        })
-      });
-      const data = (response.ok ? await response.json() : null) as { suggestions?: SuggestedReply[] } | null;
-      setSuggestions(data?.suggestions?.length ? data.suggestions : fallbackSuggestions);
-    } catch {
-      setSuggestions(fallbackSuggestions);
-    } finally {
-      setSuggestLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    if (!suggestOpen || streaming) return;
-    void loadSuggestions();
-  }, [suggestOpen, streaming, messages.length, effectiveUserNote, memorySummary, story.id, selectedPersona?.name]);
 
   const savePersonaList = (next: UserPersona[]) => {
     setPersonas(next);
@@ -585,6 +564,7 @@ export function ChatRoom({
                   {editingMessageId === message.id ? (
                     <div className="message-editor" onClick={(event) => event.stopPropagation()}>
                       <textarea value={editDraft} onChange={(event) => setEditDraft(event.target.value)} />
+                      {editError ? <p className="message-editor-error">{editError}</p> : null}
                       <div className="message-editor-actions">
                         <button type="button" onClick={() => void saveEditedMessage(message)}>
                           저장
@@ -594,6 +574,7 @@ export function ChatRoom({
                           onClick={() => {
                             setEditingMessageId(null);
                             setEditDraft("");
+                            setEditError("");
                           }}
                         >
                           취소
@@ -608,8 +589,7 @@ export function ChatRoom({
 
           {suggestOpen ? (
             <div className="chat-choice-panel" aria-label="추천 대화">
-              {suggestLoading ? <div className="choice-loading">현재 장면에 맞는 선택지를 고르는 중...</div> : null}
-              {suggestions.map((reply) => (
+              {getLatestSuggestions(messages).map((reply) => (
                 <button key={reply.text} type="button" onClick={() => void sendMessage(formatSuggestedReply(reply))}>
                   <SquarePen size={13} />
                   <span>{reply.text}</span>
@@ -707,13 +687,13 @@ export function ChatRoom({
         selectedPersonaId={selectedPersonaId}
         requirePersonaSetup={personasLoaded && !personaConfigured}
         memorySummary={memorySummary}
+        authToken={authToken}
         outputLength={outputLength}
         onDressChange={updateDress}
         onClose={() => setPanelOpen(false)}
         onChange={setUserNote}
         onPersonasChange={savePersonaList}
         onPersonaSelect={selectPersona}
-        onMemorySummaryChange={setMemorySummary}
         onOutputLengthChange={setOutputLength}
       />
     </div>
@@ -723,7 +703,7 @@ export function ChatRoom({
 function StoryText({ text, isUser = false }: { text: string; isUser?: boolean }) {
   if (isUser) return <UserText text={text} />;
 
-  const lines = text.split("\n").filter((line, index, all) => line.trim() || index < all.length - 1);
+  const lines = stripHiddenBlocks(text).split("\n").filter((line, index, all) => line.trim() || index < all.length - 1);
 
   return (
     <div className="story-text">
@@ -787,6 +767,30 @@ function formatSuggestedReply(reply: SuggestedReply) {
   return reply.text;
 }
 
+function stripHiddenBlocks(text: string) {
+  const hiddenIndexes = [text.lastIndexOf(eventPlanMarker), text.lastIndexOf(suggestionMarker)].filter((index) => index >= 0);
+  const index = hiddenIndexes.length ? Math.min(...hiddenIndexes) : -1;
+  return index >= 0 ? text.slice(0, index).trimEnd() : text;
+}
+
+function getLatestSuggestions(messages: ChatMessage[]) {
+  const assistant = [...messages].reverse().find((message) => message.role === "assistant" && parseInlineSuggestions(message.content).length);
+  const suggestions = assistant ? parseInlineSuggestions(assistant.content) : [];
+  return suggestions.length ? suggestions : fallbackSuggestions;
+}
+
+function parseInlineSuggestions(text: string): SuggestedReply[] {
+  const index = text.lastIndexOf(suggestionMarker);
+  if (index < 0) return [];
+  return text
+    .slice(index + suggestionMarker.length)
+    .split("\n")
+    .map((line) => line.replace(/^\s*\d+[.)]\s*/, "").trim())
+    .filter(Boolean)
+    .slice(0, 3)
+    .map((text) => ({ text, kind: "combo" as const }));
+}
+
 function looksLikeSituation(line: string) {
   const text = line.trim();
   if (!text) return false;
@@ -841,13 +845,13 @@ function UserNotePanel({
   selectedPersonaId,
   requirePersonaSetup,
   memorySummary,
+  authToken,
   outputLength,
   onDressChange,
   onClose,
   onChange,
   onPersonasChange,
   onPersonaSelect,
-  onMemorySummaryChange,
   onOutputLengthChange
 }: {
   sessionId: string;
@@ -858,18 +862,20 @@ function UserNotePanel({
   selectedPersonaId: string;
   requirePersonaSetup: boolean;
   memorySummary: string;
+  authToken: string;
   outputLength: number;
   onDressChange: (value: { font: string; theme: string; brightness: number }) => void;
   onClose: () => void;
   onChange: (value: string) => void;
   onPersonasChange: (value: UserPersona[]) => void;
   onPersonaSelect: (value: string) => void;
-  onMemorySummaryChange: (value: string) => void;
   onOutputLengthChange: (value: number) => void;
 }) {
   const [saved, setSaved] = useState<"idle" | "saving" | "saved">("idle");
   const [dialog, setDialog] = useState<"guide" | "persona" | "note" | "output" | "memory" | "font" | null>(null);
   const [editingPersona, setEditingPersona] = useState<UserPersona | null>(null);
+  const [memories, setMemories] = useState<MemoryEntry[]>([]);
+  const [memoriesLoading, setMemoriesLoading] = useState(false);
   const selectedPersona = personas.find((persona) => persona.id === selectedPersonaId) ?? personas[0];
 
   useEffect(() => {
@@ -888,17 +894,22 @@ function UserNotePanel({
     window.setTimeout(() => setSaved("idle"), 1200);
   };
 
-  const saveMemorySummary = async (value: string) => {
-    onMemorySummaryChange(value);
-    setSaved("saving");
-    await fetch(`/api/sessions/${sessionId}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ memorySummary: value })
-    }).catch(() => undefined);
-    setSaved("saved");
-    window.setTimeout(() => setSaved("idle"), 1200);
+  const loadMemories = async () => {
+    if (!authToken) return;
+    setMemoriesLoading(true);
+    const response = await fetch(`/api/memories?sessionId=${encodeURIComponent(sessionId)}`, {
+      headers: { Authorization: `Bearer ${authToken}` }
+    }).catch(() => null);
+    if (response?.ok) {
+      const data = (await response.json()) as { memories?: MemoryEntry[] };
+      setMemories(data.memories ?? []);
+    }
+    setMemoriesLoading(false);
   };
+
+  useEffect(() => {
+    if (dialog === "memory") void loadMemories();
+  }, [dialog, authToken, sessionId]);
 
   const changeOutputLength = (value: number) => {
     onOutputLengthChange(value);
@@ -934,7 +945,12 @@ function UserNotePanel({
           <SettingRow icon={<IdCard size={17} />} label="대화 프로필" detail={selectedPersona?.name ?? "기본 페르소나"} onClick={() => setDialog("persona")} />
           <SettingRow icon={<FileText size={17} />} label="유저 노트" detail={note.trim() ? "작성됨" : "비어 있음"} onClick={() => setDialog("note")} />
           <SettingRow icon={<SlidersHorizontal size={17} />} label="최대 출력량 조절" detail={`${outputLength.toLocaleString("ko-KR")}자`} onClick={() => setDialog("output")} />
-          <SettingRow icon={<FileText size={17} />} label="요약 메모리" detail={memorySummary.trim() ? "작성됨" : "비어 있음"} onClick={() => setDialog("memory")} />
+          <SettingRow
+            icon={<FileText size={17} />}
+            label="요약 메모리"
+            detail={memories.length ? `${memories.length}개` : memorySummary.trim() ? "기존 메모리" : "비어 있음"}
+            onClick={() => setDialog("memory")}
+          />
 
           <div className="setting-section-label">전체 설정</div>
           <SettingRow icon={<Type size={17} />} label="글꼴" detail={dress.font === "maru" ? "마루부리" : dress.font === "myeongjo" ? "명조" : "프리텐다드"} onClick={() => setDialog("font")} />
@@ -1038,7 +1054,7 @@ function UserNotePanel({
                     max={outputLengthSteps.length - 1}
                     step="1"
                     value={Math.max(0, outputLengthSteps.indexOf(outputLength))}
-                    onChange={(event) => changeOutputLength(outputLengthSteps[Number(event.target.value)] ?? 1100)}
+                    onChange={(event) => changeOutputLength(outputLengthSteps[Number(event.target.value)] ?? 1500)}
                   />
                 </label>
                 <div className="output-number">{outputLength.toLocaleString("ko-KR")}자</div>
@@ -1047,15 +1063,12 @@ function UserNotePanel({
 
             {dialog === "memory" ? (
               <div className="setting-modal-body">
-                <p>지금까지의 장기 흐름, 확정된 관계, 중요한 떡밥을 요약해 두면 다음 응답에 함께 반영됩니다.</p>
-                <textarea
-                  id="memory-summary"
-                  name="memory_summary"
-                  defaultValue={memorySummary}
-                  onChange={(event) => void saveMemorySummary(event.target.value)}
-                  className="note-textarea compact"
+                <MemoryManager
+                  authToken={authToken}
+                  memories={memories}
+                  loading={memoriesLoading}
+                  onChange={setMemories}
                 />
-                <span className="save-state">{saved === "saving" ? "저장 중..." : saved === "saved" ? "저장됨" : "자동 저장"}</span>
               </div>
             ) : null}
 
@@ -1092,6 +1105,203 @@ function UserNotePanel({
       ) : null}
     </aside>
   );
+}
+
+function MemoryManager({
+  authToken,
+  memories,
+  loading,
+  onChange
+}: {
+  authToken: string;
+  memories: MemoryEntry[];
+  loading: boolean;
+  onChange: (value: MemoryEntry[]) => void;
+}) {
+  const [activeType, setActiveType] = useState<MemoryEntryType>("long");
+  const [openKey, setOpenKey] = useState<string | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [draftContent, setDraftContent] = useState("");
+  const [saving, setSaving] = useState(false);
+  const visibleMemories = memories
+    .filter((memory) => memory.type === activeType)
+    .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+  const groups = groupMemoriesForView(activeType, visibleMemories);
+
+  const switchType = (type: MemoryEntryType) => {
+    setActiveType(type);
+    setOpenKey(null);
+    setEditingId(null);
+    setDraftContent("");
+  };
+
+  const editMemory = (memory: MemoryEntry) => {
+    setEditingId(memory.id);
+    setDraftContent(memory.content);
+  };
+
+  const resetDraft = () => {
+    setEditingId(null);
+    setDraftContent("");
+  };
+
+  const saveMemory = async () => {
+    if (!authToken || !editingId || !draftContent.trim()) return;
+    setSaving(true);
+    const response = await fetch(`/api/memories/${editingId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${authToken}` },
+      body: JSON.stringify({ content: draftContent })
+    }).catch(() => null);
+
+    if (response?.ok) {
+      const data = (await response.json()) as { memory?: MemoryEntry };
+      if (data.memory) {
+        const nextMemories = memories.map((item) => (item.id === data.memory?.id ? data.memory : item));
+        onChange(trimShortMemoryList(nextMemories));
+        resetDraft();
+      }
+    }
+    setSaving(false);
+  };
+
+  const removeMemory = async (memory: MemoryEntry) => {
+    if (!authToken || memory.tags.includes("base-character")) return;
+    if (!window.confirm(`${memory.title || "이 캐릭터 기억"}을 삭제할까요?`)) return;
+
+    const response = await fetch(`/api/memories/${memory.id}`, {
+      method: "DELETE",
+      headers: { Authorization: `Bearer ${authToken}` }
+    }).catch(() => null);
+    if (response?.ok) onChange(memories.filter((item) => item.id !== memory.id));
+  };
+
+  return (
+    <div className="memory-manager">
+      <p className="memory-guide">채팅 내용을 기반으로 정리된 기억입니다. 내용은 수정 버튼을 눌렀을 때만 편집할 수 있습니다.</p>
+      <div className="memory-tabs" role="tablist" aria-label="메모리 종류">
+        {(Object.keys(memoryTypeLabels) as MemoryEntryType[]).map((type) => (
+          <button
+            key={type}
+            type="button"
+            className={`memory-tab ${activeType === type ? "active" : ""}`}
+            onClick={() => switchType(type)}
+          >
+            {memoryTypeLabels[type]}
+          </button>
+        ))}
+      </div>
+
+      <div className="memory-list">
+        {loading ? <p>기억을 불러오는 중입니다.</p> : null}
+        {!loading && !groups.length ? <p>아직 정리된 기억이 없습니다.</p> : null}
+        {groups.map((group) => {
+          const opened = openKey === group.key;
+          return (
+            <section key={group.key} className="memory-group">
+              <button
+                type="button"
+                className="memory-group-head"
+                onClick={() => {
+                  setOpenKey(opened ? null : group.key);
+                  resetDraft();
+                }}
+              >
+                <span>{group.title}</span>
+                <small>{group.memories.length}개</small>
+                <ChevronRight size={15} className={opened ? "open" : ""} />
+              </button>
+              {opened ? (
+                <div className="memory-group-body">
+                  {group.memories.map((memory, index) => (
+                    <article key={memory.id} className="memory-card">
+                      <div className="memory-card-head">
+                        <b>{memory.title || group.itemTitle(index)}</b>
+                        <div className="memory-card-actions">
+                          <button type="button" className="btn btn-ghost compact" onClick={() => editMemory(memory)}>
+                            수정
+                          </button>
+                          {activeType === "character" && !memory.tags.includes("base-character") ? (
+                            <button type="button" className="btn btn-ghost compact danger" onClick={() => void removeMemory(memory)}>
+                              삭제
+                            </button>
+                          ) : null}
+                        </div>
+                      </div>
+                      {editingId === memory.id ? (
+                        <div className="memory-editor">
+                          <textarea value={draftContent} onChange={(event) => setDraftContent(event.target.value)} rows={7} />
+                          <div className="modal-actions">
+                            <button type="button" className="btn btn-ghost" onClick={resetDraft}>
+                              취소
+                            </button>
+                            <button type="button" className="btn btn-primary" disabled={!authToken || !draftContent.trim() || saving} onClick={() => void saveMemory()}>
+                              {saving ? "저장 중" : "저장"}
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <p>{memory.content}</p>
+                      )}
+                    </article>
+                  ))}
+                </div>
+              ) : null}
+            </section>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+const memoryTypeLabels: Record<MemoryEntryType, string> = {
+  long: "장기 기억",
+  short: "단기 기억",
+  character: "캐릭터 기억",
+  location: "장소 기억"
+};
+
+function groupMemoriesForView(type: MemoryEntryType, memories: MemoryEntry[]) {
+  if (type === "short") {
+    return memories.map((memory, index) => ({
+      key: memory.id,
+      title: memory.title || `단기 요약 ${index + 1}`,
+      memories: [memory],
+      itemTitle: () => "요약본"
+    }));
+  }
+
+  const grouped = new Map<string, MemoryEntry[]>();
+  for (const memory of memories) {
+    const key = type === "long" ? String(memory.episodeNo) : memory.subjectKey || "미분류";
+    grouped.set(key, [...(grouped.get(key) ?? []), memory]);
+  }
+
+  return [...grouped.entries()].map(([key, items]) => ({
+    key: `${type}-${key}`,
+    title: memoryGroupTitle(type, key, items),
+    memories: items,
+    itemTitle: (index: number) => (items[index]?.title || `${memoryTypeLabels[type]} ${index + 1}`)
+  }));
+}
+
+function memoryGroupTitle(type: MemoryEntryType, key: string, memories: MemoryEntry[]) {
+  if (type === "long") return `에피소드 ${key}`;
+  if (type === "character") return key === "미분류" ? "캐릭터 미분류" : key;
+  if (type === "location") return key === "미분류" ? "장소 미분류" : key;
+  return memories[0]?.title || "단기 요약";
+}
+
+function trimShortMemoryList(memories: MemoryEntry[]) {
+  const overflowIds = new Set(
+    memories
+      .filter((memory) => memory.type === "short")
+      .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
+      .slice(10)
+      .map((memory) => memory.id)
+  );
+  return memories.filter((memory) => !overflowIds.has(memory.id));
 }
 
 function SettingRow({

@@ -1,13 +1,15 @@
 import { NextResponse } from "next/server";
 import { getUserFromRequest } from "@/lib/auth";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
-import { getStory } from "@/lib/data";
+import { getCharacter, getCharacters, getStory } from "@/lib/data";
 import { localStore, nowIso, slugId } from "@/lib/local-store";
+import { ensureBaseCharacterMemories } from "@/lib/memories";
 import { ensurePublicProfile } from "@/lib/profile-sync";
 import type { ChatMessage, ChatSession } from "@/lib/types";
 
 type SessionPayload = {
   storyId: string;
+  characterId?: string;
   userId?: string;
   title?: string;
   userNote?: string;
@@ -116,7 +118,8 @@ async function createSession(body: SessionPayload, request: Request): Promise<{ 
     return { response: NextResponse.json({ error: "Story not found" }, { status: 404 }) };
   }
 
-  const title = body.title ?? story.title;
+  const character = body.characterId ? await getCharacter(body.characterId) : null;
+  const title = body.title ?? character?.name ?? story.title;
   const currentScene = body.scene || story.currentScene;
   const supabase = getSupabaseServerClient();
   const user = await getUserFromRequest(request);
@@ -135,6 +138,8 @@ async function createSession(body: SessionPayload, request: Request): Promise<{ 
       currentScene,
       memorySummary: "",
       episodeState: {
+        characterId: character?.id,
+        characterName: character?.name,
         statusText: story.statusText,
         startedAt: nowIso()
       },
@@ -145,12 +150,14 @@ async function createSession(body: SessionPayload, request: Request): Promise<{ 
       id: slugId("message"),
       sessionId: session.id,
       role: "assistant",
-      content: story.openingMessage,
+      content: character?.firstMessage || story.openingMessage,
       createdAt: nowIso()
     };
 
     localStore.sessions.unshift(session);
     localStore.messages.push(opening);
+    const characters = await getCharacters(story.id);
+    await ensureBaseCharacterMemories(session.id, characters).catch((error) => console.error("Failed to prepare base character memories", error));
 
     return { id: session.id };
   }
@@ -165,6 +172,8 @@ async function createSession(body: SessionPayload, request: Request): Promise<{ 
       current_scene: currentScene,
       memory_summary: "",
       episode_state: {
+        characterId: character?.id,
+        characterName: character?.name,
         statusText: story.statusText,
         startedAt: nowIso()
       }
@@ -176,13 +185,17 @@ async function createSession(body: SessionPayload, request: Request): Promise<{ 
     return { response: NextResponse.json({ error: error.message }, { status: 500 }) };
   }
 
-  if (story.openingMessage) {
+  const openingMessage = character?.firstMessage || story.openingMessage;
+  if (openingMessage) {
     await supabase.from("chat_messages").insert({
       session_id: data.id,
       role: "assistant",
-      content: story.openingMessage
+      content: openingMessage
     });
   }
+
+  const characters = await getCharacters(story.id);
+  await ensureBaseCharacterMemories(data.id, characters).catch((error) => console.error("Failed to prepare base character memories", error));
 
   await supabase
     .from("stories")

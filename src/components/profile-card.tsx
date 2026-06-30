@@ -337,7 +337,7 @@ export function ProfileCard() {
           <div className="gt">기본 정보</div>
           <div className="set-row"><span className="k">닉네임</span><span className="v">{displayName}</span></div>
           <Link href="/my" className="set-row">
-            <span className="k">등록 작품</span>
+            <span className="k">보관함</span>
             <span className="v link">{profile.workCount}개 보기</span>
           </Link>
           <div className="set-row"><span className="k">팔로워</span><span className="v">{profile.followerCount.toLocaleString("ko-KR")}</span></div>

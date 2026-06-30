@@ -1,8 +1,8 @@
 import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { MessageCircle } from "lucide-react";
 import { WorkspaceLayout } from "@/components/app-shell";
+import { StartChatButton } from "@/components/start-chat-button";
 import { getCharacter, getCharacters } from "@/lib/data";
 
 export const dynamic = "force-dynamic";
@@ -43,9 +43,11 @@ export default async function CharacterDetailPage({
             <div><div className="n">공개</div><div className="l">상태</div></div>
             <div><div className="n">AI</div><div className="l">롤플레잉</div></div>
           </div>
-          <button type="button" className="btn btn-primary start-chat">
-            <MessageCircle size={17} /> 대화 시작하기
-          </button>
+          {character.storyId ? (
+            <StartChatButton storyId={character.storyId} characterId={character.id} title={`${character.name} 채팅`} />
+          ) : (
+            <p className="locked-note">연결된 스토리가 있어야 캐릭터 채팅을 시작할 수 있습니다.</p>
+          )}
         </div>
 
         <div className="chat-preview">

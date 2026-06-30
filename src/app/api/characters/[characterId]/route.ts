@@ -10,12 +10,17 @@ type RouteContext = {
 type CharacterUpdatePayload = {
   name?: string;
   description?: string;
+  gender?: string;
+  age?: string;
   avatar_url?: string;
   personality?: string;
   speech_style?: string;
   first_message?: string;
   prompt?: string;
   storyId?: string;
+  worldId?: string;
+  scope?: "independent" | "world";
+  isEnabled?: boolean;
   visibility?: "public" | "private";
 };
 
@@ -32,12 +37,17 @@ export async function PATCH(request: Request, context: RouteContext) {
     Object.assign(character, {
       name: payload.name ?? character.name,
       description: payload.description ?? character.description,
+      gender: payload.gender ?? character.gender,
+      age: payload.age ?? character.age,
       avatarUrl: payload.avatar_url ?? character.avatarUrl,
       personality: payload.personality ?? character.personality,
       speechStyle: payload.speech_style ?? character.speechStyle,
       firstMessage: payload.first_message ?? character.firstMessage,
       prompt: payload.prompt ?? character.prompt,
       storyId: payload.story_id ?? character.storyId,
+      worldId: payload.world_id ?? character.worldId,
+      scope: payload.scope ?? character.scope,
+      isEnabled: payload.is_enabled ?? character.isEnabled,
       visibility: payload.visibility ?? character.visibility
     });
     return NextResponse.json(character);
@@ -80,12 +90,17 @@ function normalizePayload(body: CharacterUpdatePayload) {
   return {
     name: clean(body.name),
     description: clean(body.description),
+    gender: clean(body.gender),
+    age: clean(body.age),
     avatar_url: clean(body.avatar_url),
     personality: clean(body.personality),
     speech_style: clean(body.speech_style),
     first_message: clean(body.first_message),
     prompt: clean(body.prompt),
     story_id: clean(body.storyId) || null,
+    world_id: clean(body.worldId) || null,
+    scope: body.scope,
+    is_enabled: typeof body.isEnabled === "boolean" ? body.isEnabled : undefined,
     visibility: body.visibility
   };
 }

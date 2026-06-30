@@ -2,13 +2,31 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Check, ChevronDown, Eye, FileText, ImagePlus, Loader2, RotateCcw, Save, Upload, X } from "lucide-react";
+import { ArrowLeft, Check, ChevronDown, Eye, FileText, ImagePlus, Loader2, Pencil, Plus, RotateCcw, Save, Upload, X } from "lucide-react";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 
 type CreatorType = "story" | "character";
 type UploadState = "idle" | "uploading" | "uploaded" | "error";
 type Visibility = "public" | "private";
 type Draft = Record<string, string>;
+type CreatorMode = "create" | "edit";
+
+type StoryCastCharacter = {
+  id: string;
+  source: "existing" | "new";
+  characterId?: string;
+  name: string;
+  description: string;
+  gender: string;
+  age: string;
+  personality: string;
+  speechStyle: string;
+  memo: string;
+  prompt: string;
+  avatarUrl: string;
+};
+
+type ExistingCharacterOption = Omit<StoryCastCharacter, "source" | "memo"> & { firstMessage?: string };
 
 type Field = {
   name: string;
@@ -31,6 +49,15 @@ type Section = {
   required?: boolean;
   fields: Field[];
 };
+
+function normalizeStoryCast(characters: StoryCastCharacter[]) {
+  return characters.map((character) => ({
+    ...character,
+    gender: character.gender ?? "",
+    age: character.age ?? "",
+    memo: character.memo ?? ""
+  }));
+}
 
 const storySections: Section[] = [
   {
@@ -73,6 +100,13 @@ const storySections: Section[] = [
       { name: "world", label: "세계관 / 설정 / 정보", helper: "세계관, 규칙, NPC, 금지사항을 길게 적어도 됩니다.", type: "textarea", placeholder: "시대, 장소, 세력, 주요 사건, 숨겨진 규칙, NPC 목록", rows: 8, maxLength: 5000, required: true },
       { name: "ai_rules", label: "AI 행동 규칙", helper: "답변 방식, 문체, 사건 전개 속도, 캐릭터 붕괴 방지 규칙입니다.", type: "textarea", placeholder: "유저가 짧게 말해도 장면을 이어가고 NPC가 능동적으로 반응하게 해 주세요.", rows: 7, maxLength: 3000 }
     ]
+  },
+  {
+    id: "characters",
+    title: "캐릭터 설정",
+    shortTitle: "캐릭터",
+    description: "스토리에 기본 등장인물로 연결할 캐릭터를 불러오거나 새로 등록합니다.",
+    fields: []
   },
   {
     id: "start",
@@ -146,6 +180,8 @@ const characterSections: Section[] = [
     fields: [
       { name: "name", label: "캐릭터 이름", helper: "2~30자 권장", type: "input", placeholder: "예: 리치코", maxLength: 30, required: true },
       { name: "description", label: "한 줄 소개", helper: "30~120자 권장", type: "textarea", placeholder: "어떤 캐릭터인지 한눈에 보이는 소개를 적어주세요.", rows: 3, maxLength: 120, required: true },
+      { name: "gender", label: "성별", helper: "필요한 경우 캐릭터의 성별 설정을 적어주세요.", type: "input", placeholder: "예: 여성, 남성, 무성, 비공개", maxLength: 30 },
+      { name: "age", label: "나이", helper: "정확한 나이나 연령대를 적을 수 있습니다.", type: "input", placeholder: "예: 30세, 20대 후반, 불명", maxLength: 30 },
       {
         name: "character_tags",
         label: "캐릭터 특성",
@@ -206,15 +242,33 @@ const characterSections: Section[] = [
 const fallbackStoryImage = "https://images.unsplash.com/photo-1490730141103-6cac27aaab94?auto=format&fit=crop&w=1200&q=80";
 const fallbackCharacterImage = "https://images.unsplash.com/photo-1494790108377-be9c29b29330?auto=format&fit=crop&w=600&q=80";
 
-export function CreatorLongForm({ type }: { type: CreatorType }) {
+export function CreatorLongForm({
+  type,
+  mode = "create",
+  itemId,
+  initialDraft = {},
+  initialImageUrl = "",
+  initialStoryCast = [],
+  characterScope = "independent",
+  worldId
+}: {
+  type: CreatorType;
+  mode?: CreatorMode;
+  itemId?: string;
+  initialDraft?: Draft;
+  initialImageUrl?: string;
+  initialStoryCast?: StoryCastCharacter[];
+  characterScope?: "independent" | "world";
+  worldId?: string;
+}) {
   const router = useRouter();
   const sections = type === "story" ? storySections : characterSections;
-  const storageKey = `lime-${type}-draft`;
+  const storageKey = mode === "edit" && itemId ? `lime-${type}-edit-${itemId}` : `lime-${type}-draft`;
   const imageField = type === "story" ? "thumbnail_url" : "avatar_url";
-  const [draft, setDraft] = useState<Draft>({});
+  const [draft, setDraft] = useState<Draft>(initialDraft);
   const [activeSection, setActiveSection] = useState(sections[0].id);
   const [savedSections, setSavedSections] = useState<Record<string, boolean>>({});
-  const [imageUrl, setImageUrl] = useState("");
+  const [imageUrl, setImageUrl] = useState(initialImageUrl);
   const [uploadState, setUploadState] = useState<UploadState>("idle");
   const [saving, setSaving] = useState(false);
   const [authToken, setAuthToken] = useState("");
@@ -222,19 +276,22 @@ export function CreatorLongForm({ type }: { type: CreatorType }) {
   const [notice, setNotice] = useState("");
   const [previewOpen, setPreviewOpen] = useState(false);
   const [missingFields, setMissingFields] = useState<string[]>([]);
+  const [storyCast, setStoryCast] = useState<StoryCastCharacter[]>(initialStoryCast);
+  const [existingCharacters, setExistingCharacters] = useState<ExistingCharacterOption[]>([]);
 
   useEffect(() => {
     const saved = window.localStorage.getItem(storageKey);
     if (!saved) return;
     try {
-      const parsed = JSON.parse(saved) as { draft?: Draft; imageUrl?: string; savedSections?: Record<string, boolean> };
-      setDraft(parsed.draft ?? {});
-      setImageUrl(parsed.imageUrl ?? parsed.draft?.[imageField] ?? "");
+      const parsed = JSON.parse(saved) as { draft?: Draft; imageUrl?: string; savedSections?: Record<string, boolean>; storyCast?: StoryCastCharacter[] };
+      setDraft({ ...initialDraft, ...(parsed.draft ?? {}) });
+      setImageUrl(parsed.imageUrl ?? parsed.draft?.[imageField] ?? initialImageUrl);
       setSavedSections(parsed.savedSections ?? {});
+      setStoryCast(Array.isArray(parsed.storyCast) ? normalizeStoryCast(parsed.storyCast) : initialStoryCast);
     } catch {
       window.localStorage.removeItem(storageKey);
     }
-  }, [imageField, storageKey]);
+  }, [imageField, initialDraft, initialImageUrl, initialStoryCast, storageKey]);
 
   useEffect(() => {
     const supabase = getSupabaseBrowserClient();
@@ -251,14 +308,36 @@ export function CreatorLongForm({ type }: { type: CreatorType }) {
     return () => data.subscription.unsubscribe();
   }, []);
 
+  useEffect(() => {
+    if (type !== "story" || !authToken) return;
+    let ignore = false;
+    void (async () => {
+      const response = await fetch("/api/my/characters", {
+        headers: { Authorization: `Bearer ${authToken}` }
+      });
+      if (!response.ok) return;
+      const data = (await response.json()) as { characters?: ExistingCharacterOption[] };
+      if (!ignore) setExistingCharacters(data.characters ?? []);
+    })();
+    return () => {
+      ignore = true;
+    };
+  }, [authToken, type]);
+
   const preview = useMemo(() => buildPreview(type, draft, imageUrl), [draft, imageUrl, type]);
   const activeIndex = Math.max(0, sections.findIndex((section) => section.id === activeSection));
   const currentSection = sections[activeIndex] ?? sections[0];
   const previousSection = sections[activeIndex - 1];
   const nextSection = sections[activeIndex + 1];
 
-  const persistDraft = (nextDraft = draft, nextImageUrl = imageUrl, nextSavedSections = savedSections) => {
-    window.localStorage.setItem(storageKey, JSON.stringify({ draft: nextDraft, imageUrl: nextImageUrl, savedSections: nextSavedSections }));
+  const persistDraft = (nextDraft = draft, nextImageUrl = imageUrl, nextSavedSections = savedSections, nextStoryCast = storyCast) => {
+    window.localStorage.setItem(storageKey, JSON.stringify({ draft: nextDraft, imageUrl: nextImageUrl, savedSections: nextSavedSections, storyCast: nextStoryCast }));
+  };
+
+  const updateStoryCast = (nextStoryCast: StoryCastCharacter[]) => {
+    setStoryCast(nextStoryCast);
+    persistDraft(draft, imageUrl, savedSections, nextStoryCast);
+    setNotice("");
   };
 
   const updateField = (name: string, value: string) => {
@@ -332,11 +411,25 @@ export function CreatorLongForm({ type }: { type: CreatorType }) {
     setNotice("");
     persistDraft();
     try {
-      const endpoint = type === "story" ? "/api/stories" : "/api/characters";
+      const endpoint =
+        mode === "edit" && itemId
+          ? type === "story"
+            ? `/api/stories/${itemId}`
+            : `/api/characters/${itemId}`
+          : type === "story"
+            ? "/api/stories"
+            : "/api/characters";
       const response = await fetch(endpoint, {
-        method: "POST",
+        method: mode === "edit" ? "PATCH" : "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${authToken}` },
-        body: JSON.stringify({ ...draft, [imageField]: imageUrl, visibility })
+        body: JSON.stringify({
+          ...draft,
+          [imageField]: imageUrl,
+          visibility,
+          scope: type === "character" ? characterScope : undefined,
+          worldId: type === "character" ? worldId : undefined,
+          storyCharacters: type === "story" ? storyCast : undefined
+        })
       });
       const data = (await response.json()) as { id?: string; error?: string };
       if (!response.ok || !data.id) throw new Error(data.error ?? "저장에 실패했습니다.");
@@ -444,9 +537,13 @@ export function CreatorLongForm({ type }: { type: CreatorType }) {
               </div>
 
               <div className="space-y-5">
-                {currentSection.fields.map((field) => (
-                  <FieldControl key={field.name} field={field} value={draft[field.name] ?? ""} error={missingFields.includes(field.name)} onChange={(value) => updateField(field.name, value)} />
-                ))}
+                {type === "story" && currentSection.id === "characters" ? (
+                  <StoryCastSection characters={storyCast} existingCharacters={existingCharacters} onChange={updateStoryCast} />
+                ) : (
+                  currentSection.fields.map((field) => (
+                    <FieldControl key={field.name} field={field} value={draft[field.name] ?? ""} error={missingFields.includes(field.name)} onChange={(value) => updateField(field.name, value)} />
+                  ))
+                )}
               </div>
 
               <SectionFooter
@@ -528,6 +625,319 @@ function ImageSection({ type, imageUrl, uploadState, onUpload, onUseFallback }: 
       </div>
     </section>
   );
+}
+
+function StoryCastSection({
+  characters,
+  existingCharacters,
+  onChange
+}: {
+  characters: StoryCastCharacter[];
+  existingCharacters: ExistingCharacterOption[];
+  onChange: (characters: StoryCastCharacter[]) => void;
+}) {
+  const [selectedId, setSelectedId] = useState("");
+  const [editingId, setEditingId] = useState("");
+  const [editDraft, setEditDraft] = useState({
+    name: "",
+    description: "",
+    gender: "",
+    age: "",
+    personality: "",
+    speechStyle: "",
+    memo: ""
+  });
+  const [draft, setDraft] = useState({
+    name: "",
+    description: "",
+    gender: "",
+    age: "",
+    personality: "",
+    speechStyle: "",
+    memo: ""
+  });
+
+  const selectedExisting = existingCharacters.find((character) => character.id === selectedId);
+  const linkedExistingIds = new Set(characters.map((character) => character.characterId).filter(Boolean));
+
+  const addExisting = () => {
+    if (!selectedExisting || linkedExistingIds.has(selectedExisting.id)) return;
+    onChange([
+      ...characters,
+      {
+        ...selectedExisting,
+        source: "existing",
+        characterId: selectedExisting.id,
+        gender: selectedExisting.gender ?? "",
+        age: selectedExisting.age ?? "",
+        memo: ""
+      }
+    ]);
+    setSelectedId("");
+  };
+
+  const addNew = () => {
+    const name = draft.name.trim();
+    const personality = draft.personality.trim();
+    const speechStyle = draft.speechStyle.trim();
+    if (!name || !personality || !speechStyle) return;
+    const description = draft.description.trim();
+    const gender = draft.gender.trim();
+    const age = draft.age.trim();
+    const memo = draft.memo.trim();
+    onChange([
+      ...characters,
+      {
+        id: `new-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+        source: "new",
+        name,
+        description,
+        gender,
+        age,
+        personality,
+        speechStyle,
+        memo,
+        prompt: buildStoryCastPrompt({ name, description, gender, age, personality, speechStyle, memo }),
+        avatarUrl: ""
+      }
+    ]);
+    setDraft({ name: "", description: "", gender: "", age: "", personality: "", speechStyle: "", memo: "" });
+  };
+
+  const removeCharacter = (id: string) => {
+    if (editingId === id) {
+      setEditingId("");
+      setEditDraft({ name: "", description: "", gender: "", age: "", personality: "", speechStyle: "", memo: "" });
+    }
+    onChange(characters.filter((character) => character.id !== id));
+  };
+
+  const startEdit = (character: StoryCastCharacter) => {
+    setEditingId(character.id);
+    setEditDraft({
+      name: character.name,
+      description: character.description,
+      gender: character.gender ?? "",
+      age: character.age ?? "",
+      personality: character.personality,
+      speechStyle: character.speechStyle,
+      memo: character.memo
+    });
+  };
+
+  const cancelEdit = () => {
+    setEditingId("");
+    setEditDraft({ name: "", description: "", gender: "", age: "", personality: "", speechStyle: "", memo: "" });
+  };
+
+  const saveEdit = () => {
+    const name = editDraft.name.trim();
+        const gender = editDraft.gender.trim();
+        const age = editDraft.age.trim();
+        const personality = editDraft.personality.trim();
+    const speechStyle = editDraft.speechStyle.trim();
+    if (!editingId || !name || !personality || !speechStyle) return;
+
+    onChange(
+      characters.map((character) => {
+        if (character.id !== editingId) return character;
+        const description = editDraft.description.trim();
+        const memo = editDraft.memo.trim();
+        return {
+          ...character,
+          name,
+          description,
+          gender,
+          age,
+          personality,
+          speechStyle,
+          memo,
+          prompt: buildStoryCastPrompt({ name, description, gender, age, personality, speechStyle, memo })
+        };
+      })
+    );
+    cancelEdit();
+  };
+
+  return (
+    <div className="space-y-5">
+      <div className="rounded-xl border border-[#dfe3e8] bg-[#fbfbfb] p-4">
+        <div className="mb-3">
+          <h4 className="text-sm font-extrabold text-[#1f2937]">내 캐릭터 불러오기</h4>
+          <p className="mt-1 text-xs leading-5 text-[#6b7280]">이미 만들어둔 캐릭터를 이 스토리의 기본 등장인물로 연결합니다.</p>
+        </div>
+        <div className="flex flex-col gap-2 sm:flex-row">
+          <select value={selectedId} onChange={(event) => setSelectedId(event.target.value)} className="h-11 min-w-0 flex-1 rounded-xl border border-[#dfe3e8] bg-white px-3 text-sm font-semibold outline-none focus:border-[#a3e635] focus:ring-2 focus:ring-[#ecfccb]">
+            <option value="">불러올 캐릭터 선택</option>
+            {existingCharacters.map((character) => (
+              <option key={character.id} value={character.id} disabled={linkedExistingIds.has(character.id)}>
+                {character.name}{linkedExistingIds.has(character.id) ? " (등록됨)" : ""}
+              </option>
+            ))}
+          </select>
+          <button type="button" onClick={addExisting} disabled={!selectedExisting || linkedExistingIds.has(selectedExisting.id)} className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-[#1f2937] px-4 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-40">
+            <Plus size={16} /> 불러오기
+          </button>
+        </div>
+      </div>
+
+      <div className="rounded-xl border border-[#dfe3e8] bg-white p-4">
+        <div className="mb-3">
+          <h4 className="text-sm font-extrabold text-[#1f2937]">등장인물 추가</h4>
+          <p className="mt-1 text-xs leading-5 text-[#6b7280]">이 스토리 안에서 바로 사용할 캐릭터를 이름, 성격, 말투 중심으로 등록합니다.</p>
+        </div>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <label className="block">
+            <span className="mb-1 block text-xs font-extrabold text-[#4b5563]">이름 *</span>
+            <input value={draft.name} onChange={(event) => setDraft((current) => ({ ...current, name: event.target.value }))} className="h-11 w-full rounded-xl border border-[#dfe3e8] px-3 text-sm outline-none focus:border-[#a3e635] focus:ring-2 focus:ring-[#ecfccb]" placeholder="예: 시칠" />
+          </label>
+          <label className="block">
+            <span className="mb-1 block text-xs font-extrabold text-[#4b5563]">짧은 소개</span>
+            <input value={draft.description} onChange={(event) => setDraft((current) => ({ ...current, description: event.target.value }))} className="h-11 w-full rounded-xl border border-[#dfe3e8] px-3 text-sm outline-none focus:border-[#a3e635] focus:ring-2 focus:ring-[#ecfccb]" placeholder="역할이나 첫인상" />
+          </label>
+          <label className="block">
+            <span className="mb-1 block text-xs font-extrabold text-[#4b5563]">성별</span>
+            <input value={draft.gender} onChange={(event) => setDraft((current) => ({ ...current, gender: event.target.value }))} className="h-11 w-full rounded-xl border border-[#dfe3e8] px-3 text-sm outline-none focus:border-[#a3e635] focus:ring-2 focus:ring-[#ecfccb]" placeholder="예: 여성, 남성, 비공개" />
+          </label>
+          <label className="block">
+            <span className="mb-1 block text-xs font-extrabold text-[#4b5563]">나이</span>
+            <input value={draft.age} onChange={(event) => setDraft((current) => ({ ...current, age: event.target.value }))} className="h-11 w-full rounded-xl border border-[#dfe3e8] px-3 text-sm outline-none focus:border-[#a3e635] focus:ring-2 focus:ring-[#ecfccb]" placeholder="예: 30세, 불명" />
+          </label>
+          <label className="block sm:col-span-2">
+            <span className="mb-1 block text-xs font-extrabold text-[#4b5563]">성격 *</span>
+            <textarea value={draft.personality} onChange={(event) => setDraft((current) => ({ ...current, personality: event.target.value }))} rows={3} className="w-full resize-y rounded-xl border border-[#dfe3e8] p-3 text-sm leading-6 outline-none focus:border-[#a3e635] focus:ring-2 focus:ring-[#ecfccb]" placeholder="겉으로 보이는 성격, 숨기는 면, 행동 기준" />
+          </label>
+          <label className="block sm:col-span-2">
+            <span className="mb-1 block text-xs font-extrabold text-[#4b5563]">말투 *</span>
+            <textarea value={draft.speechStyle} onChange={(event) => setDraft((current) => ({ ...current, speechStyle: event.target.value }))} rows={3} className="w-full resize-y rounded-xl border border-[#dfe3e8] p-3 text-sm leading-6 outline-none focus:border-[#a3e635] focus:ring-2 focus:ring-[#ecfccb]" placeholder="호칭, 문장 길이, 자주 쓰는 표현" />
+          </label>
+          <label className="block sm:col-span-2">
+            <span className="mb-1 block text-xs font-extrabold text-[#4b5563]">메모</span>
+            <textarea value={draft.memo} onChange={(event) => setDraft((current) => ({ ...current, memo: event.target.value }))} rows={3} className="w-full resize-y rounded-xl border border-[#dfe3e8] p-3 text-sm leading-6 outline-none focus:border-[#a3e635] focus:ring-2 focus:ring-[#ecfccb]" placeholder="이 스토리에서의 역할, 관계, 주의할 설정" />
+          </label>
+        </div>
+        <div className="mt-3 flex justify-end">
+          <button type="button" onClick={addNew} disabled={!draft.name.trim() || !draft.personality.trim() || !draft.speechStyle.trim()} className="inline-flex h-10 items-center gap-2 rounded-lg bg-[#a3e635] px-4 text-sm font-extrabold text-[#1a2e05] disabled:cursor-not-allowed disabled:opacity-40">
+            <Plus size={16} /> 등장인물 추가
+          </button>
+        </div>
+      </div>
+
+      <div className="space-y-2">
+        <div className="flex items-center justify-between">
+          <h4 className="text-sm font-extrabold text-[#1f2937]">등록된 기본 등장인물</h4>
+          <span className="text-xs font-semibold text-[#6b7280]">{characters.length}명</span>
+        </div>
+        {characters.length ? (
+          <div className="grid gap-2">
+            {characters.map((character) => {
+              const isEditing = editingId === character.id;
+              return (
+              <div key={character.id} className="flex items-start justify-between gap-3 rounded-xl border border-[#e5e7eb] bg-white p-3">
+                <div className="min-w-0 flex-1">
+                  {isEditing ? (
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <label className="block">
+                        <span className="mb-1 block text-xs font-extrabold text-[#4b5563]">이름 *</span>
+                        <input value={editDraft.name} onChange={(event) => setEditDraft((current) => ({ ...current, name: event.target.value }))} className="h-10 w-full rounded-xl border border-[#dfe3e8] px-3 text-sm outline-none focus:border-[#a3e635] focus:ring-2 focus:ring-[#ecfccb]" />
+                      </label>
+                      <label className="block">
+                        <span className="mb-1 block text-xs font-extrabold text-[#4b5563]">짧은 소개</span>
+                        <input value={editDraft.description} onChange={(event) => setEditDraft((current) => ({ ...current, description: event.target.value }))} className="h-10 w-full rounded-xl border border-[#dfe3e8] px-3 text-sm outline-none focus:border-[#a3e635] focus:ring-2 focus:ring-[#ecfccb]" />
+                      </label>
+                      <label className="block">
+                        <span className="mb-1 block text-xs font-extrabold text-[#4b5563]">성별</span>
+                        <input value={editDraft.gender} onChange={(event) => setEditDraft((current) => ({ ...current, gender: event.target.value }))} className="h-10 w-full rounded-xl border border-[#dfe3e8] px-3 text-sm outline-none focus:border-[#a3e635] focus:ring-2 focus:ring-[#ecfccb]" />
+                      </label>
+                      <label className="block">
+                        <span className="mb-1 block text-xs font-extrabold text-[#4b5563]">나이</span>
+                        <input value={editDraft.age} onChange={(event) => setEditDraft((current) => ({ ...current, age: event.target.value }))} className="h-10 w-full rounded-xl border border-[#dfe3e8] px-3 text-sm outline-none focus:border-[#a3e635] focus:ring-2 focus:ring-[#ecfccb]" />
+                      </label>
+                      <label className="block sm:col-span-2">
+                        <span className="mb-1 block text-xs font-extrabold text-[#4b5563]">성격 *</span>
+                        <textarea value={editDraft.personality} onChange={(event) => setEditDraft((current) => ({ ...current, personality: event.target.value }))} rows={3} className="w-full resize-y rounded-xl border border-[#dfe3e8] p-3 text-sm leading-6 outline-none focus:border-[#a3e635] focus:ring-2 focus:ring-[#ecfccb]" />
+                      </label>
+                      <label className="block sm:col-span-2">
+                        <span className="mb-1 block text-xs font-extrabold text-[#4b5563]">말투 *</span>
+                        <textarea value={editDraft.speechStyle} onChange={(event) => setEditDraft((current) => ({ ...current, speechStyle: event.target.value }))} rows={3} className="w-full resize-y rounded-xl border border-[#dfe3e8] p-3 text-sm leading-6 outline-none focus:border-[#a3e635] focus:ring-2 focus:ring-[#ecfccb]" />
+                      </label>
+                      <label className="block sm:col-span-2">
+                        <span className="mb-1 block text-xs font-extrabold text-[#4b5563]">메모</span>
+                        <textarea value={editDraft.memo} onChange={(event) => setEditDraft((current) => ({ ...current, memo: event.target.value }))} rows={3} className="w-full resize-y rounded-xl border border-[#dfe3e8] p-3 text-sm leading-6 outline-none focus:border-[#a3e635] focus:ring-2 focus:ring-[#ecfccb]" />
+                      </label>
+                      <div className="flex justify-end gap-2 sm:col-span-2">
+                        <button type="button" onClick={cancelEdit} className="h-9 rounded-lg border border-[#ececef] px-3 text-sm font-bold text-[#4b5563] hover:bg-[#f7f7f8]">
+                          취소
+                        </button>
+                        <button type="button" onClick={saveEdit} disabled={!editDraft.name.trim() || !editDraft.personality.trim() || !editDraft.speechStyle.trim()} className="inline-flex h-9 items-center gap-2 rounded-lg bg-[#a3e635] px-3 text-sm font-extrabold text-[#1a2e05] disabled:cursor-not-allowed disabled:opacity-40">
+                          <Check size={15} /> 저장
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <b className="text-sm text-[#1f2937]">{character.name}</b>
+                        <span className="rounded-full bg-[#f7fee7] px-2 py-0.5 text-[11px] font-bold text-[#4d6b00]">{character.source === "existing" ? "불러옴" : "신규"}</span>
+                      </div>
+                      {character.description ? <p className="mt-1 text-xs leading-5 text-[#6b7280]">{character.description}</p> : null}
+                      {[character.gender ?? "", character.age ?? ""].filter(Boolean).length ? <p className="mt-1 text-xs leading-5 text-[#6b7280]">{[character.gender ?? "", character.age ?? ""].filter(Boolean).join(" · ")}</p> : null}
+                      <p className="mt-2 line-clamp-2 text-xs leading-5 text-[#4b5563]">{character.personality}</p>
+                      <p className="mt-1 line-clamp-2 text-xs leading-5 text-[#4b5563]">{character.speechStyle}</p>
+                      {character.memo ? <p className="mt-1 line-clamp-2 text-xs leading-5 text-[#6b7280]">메모: {character.memo}</p> : null}
+                    </>
+                  )}
+                </div>
+                <div className="flex shrink-0 items-center gap-1">
+                  {!isEditing ? (
+                    <button type="button" onClick={() => startEdit(character)} className="grid size-8 place-items-center rounded-full border border-[#ececef] text-[#6b7280] hover:bg-[#f7f7f8]" aria-label={`${character.name} 수정`}>
+                      <Pencil size={14} />
+                    </button>
+                  ) : null}
+                  <button type="button" onClick={() => removeCharacter(character.id)} className="grid size-8 place-items-center rounded-full border border-[#ececef] text-[#6b7280] hover:bg-[#f7f7f8]" aria-label={`${character.name} 삭제`}>
+                    <X size={15} />
+                  </button>
+                </div>
+              </div>
+            );
+            })}
+          </div>
+        ) : (
+          <div className="rounded-xl border border-dashed border-[#dfe3e8] bg-[#fbfbfb] p-5 text-center text-sm font-semibold text-[#6b7280]">아직 등록된 기본 등장인물이 없습니다.</div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function buildStoryCastPrompt({
+  name,
+  description,
+  gender,
+  age,
+  personality,
+  speechStyle,
+  memo
+}: {
+  name: string;
+  description: string;
+  gender: string;
+  age: string;
+  personality: string;
+  speechStyle: string;
+  memo: string;
+}) {
+  return [
+    `Character name: ${name}`,
+    description ? `Description: ${description}` : "",
+    gender ? `Gender: ${gender}` : "",
+    age ? `Age: ${age}` : "",
+    `Personality: ${personality}`,
+    `Speech style: ${speechStyle}`,
+    memo ? `Story memo: ${memo}` : ""
+  ]
+    .filter(Boolean)
+    .join("\n");
 }
 
 function SectionFooter({

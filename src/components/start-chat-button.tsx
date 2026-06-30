@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { MessageCircle } from "lucide-react";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 
-export function StartChatButton({ storyId, scene }: { storyId: string; scene?: string }) {
+export function StartChatButton({ storyId, scene, characterId, title }: { storyId: string; scene?: string; characterId?: string; title?: string }) {
   const router = useRouter();
   const [error, setError] = useState("");
   const [isPending, startTransition] = useTransition();
@@ -27,7 +27,7 @@ export function StartChatButton({ storyId, scene }: { storyId: string; scene?: s
           "Content-Type": "application/json",
           Authorization: `Bearer ${session.access_token}`
         },
-        body: JSON.stringify({ storyId, scene })
+        body: JSON.stringify({ storyId, scene, characterId, title })
       });
 
       if (!response.ok) {

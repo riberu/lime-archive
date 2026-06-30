@@ -3,6 +3,7 @@ import Link from "next/link";
 import { ChevronRight, MessageCircle, Plus, Sparkles } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { CharacterCard, StoryCard, WideStoryCard } from "@/components/content-card";
+import { HomeResumeSection } from "@/components/home-resume-section";
 import { getCharacters, getStories } from "@/lib/data";
 import { genreItems, getFeaturedStories } from "@/lib/genres";
 
@@ -33,30 +34,7 @@ export default async function HomePage() {
           </div>
         </section>
 
-        <section className="shelf">
-          <div className="shelf-head">
-            <h2>이어서 대화하기</h2>
-            <Link href="/stories" className="more">
-              전체 <ChevronRight size={15} />
-            </Link>
-          </div>
-          <div className="track">
-            <Link href="/stories" className="resume">
-              <span className="av" />
-              <span className="ri">
-                <b className="rn">진행하던 이야기를 이어가요</b>
-                <small className="rc">라임 채팅 팝업에서도 최근 대화를 볼 수 있어요.</small>
-              </span>
-            </Link>
-            <Link href="/create/story" className="resume">
-              <span className="av" />
-              <span className="ri">
-                <b className="rn">새 스토리 만들기</b>
-                <small className="rc">긴폼으로 설정을 저장하며 작성해요.</small>
-              </span>
-            </Link>
-          </div>
-        </section>
+        <HomeResumeSection />
 
         <nav className="gchips static mt-5" aria-label="장르 바로가기">
           <Link href="/stories" className="gchip on">

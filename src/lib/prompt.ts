@@ -15,7 +15,7 @@ export function buildSystemInstruction(params: {
   const characterBlock = params.characters?.length
     ? params.characters.map(formatCharacter).join("\n\n")
     : "등장인물 설정이 아직 없습니다.";
-  const targetLength = params.outputLength ?? 1100;
+  const targetLength = params.outputLength ?? 1500;
   const episode = params.episodeState ?? {};
   const storyPrompt = renderStoryTemplate(params.story.systemPrompt || "고정 세계관이 아직 작성되지 않았습니다.", protagonistName);
   const currentScene = renderStoryTemplate(params.currentScene || params.story.currentScene || "불명", protagonistName);
@@ -31,14 +31,19 @@ export function buildSystemInstruction(params: {
     "",
     "[절대 호칭 규칙]",
     `본문에서 주인공을 절대 "사용자", "유저", "플레이어", "주인공", "그", "그녀", "그 사람"이라고 부르지 않는다. 반드시 "${protagonistName}"이라는 이름을 쓴다.`,
-    "NPC나 주변 인물도 '상대', '남자', '여자', '관리관', 'NPC' 같은 임시 호칭으로 부르지 말고, 설정에 있는 캐릭터명을 쓴다.",
+    "지문과 상황 설명에서는 NPC나 주변 인물도 '그', '그녀', '그 사람', '상대', '남자', '여자', '관리관', 'NPC' 같은 대명사/임시 호칭으로 부르지 말고 캐릭터명, 직책+이름, 외형+이름을 쓴다.",
+    "대사 안에서는 자연스러운 호칭을 허용하지만, 성별은 반드시 등장인물 설정을 우선한다. 남성 캐릭터를 그녀/여자로, 여성 캐릭터를 그/남자로 잘못 부르지 않는다.",
+    "이름 반복이 어색하면 대명사를 쓰지 말고 '시칠의 붉은 눈', '스파인의 뼈 꼬리', '관리국장 시칠'처럼 신체/직책/소유격을 이용해 문장을 자연스럽게 바꾼다.",
+    "출력 직전에 지문 문장을 자체 검수한다. 지문에 '그/그녀/그 사람'이 있으면 해당 문장을 캐릭터명 또는 캐릭터의 직책/신체/소유격 표현으로 다시 쓴 뒤 출력한다.",
     "",
     "[처리 순서 - 내부적으로만 수행하고 출력하지 않는다]",
-    "1. 세계관 점검: 고정 세계관, 등장인물, 개인 설정집과 어긋나는 전개가 없는지 확인한다.",
-    `2. 입력 해석: ${protagonistName}의 새 입력에서 대사, 행동, 상황 묘사, 요청을 구분한다.`,
-    `3. 행동 반영: ${protagonistName}의 행동이 장면과 인물에게 미치는 결과를 판정한다.`,
-    "4. 사건 전개: 개연성에 맞는 다음 사건, NPC 반응, 환경 변화를 반드시 하나 이상 발생시킨다.",
-    "5. 장면 갱신: 이전 응답과 같은 정지 상태를 반복하지 말고 장소, 감정, 관계, 사건 중 적어도 하나를 앞으로 움직인다.",
+    `1. 유저노트/주인공 프로필 최우선 반영: ${protagonistName}의 이름, 성격, 말투, 외형, 금지 행동, 사용자가 입력한 의도를 다른 어떤 정보보다 먼저 적용한다.`,
+    `2. 채팅 입력 해석: ${protagonistName}의 새 입력에서 대사, 행동, 상황 묘사, 요청을 구분하고, ${protagonistName}이 하지 않은 말과 감정을 새로 만들지 않는다.`,
+    "3. 등장 캐릭터 최우선 반영: 이번 턴에 필요한 등장인물만 고르고, 각 캐릭터의 성격/말투/캐릭터 프롬프트/스토리 내 역할 메모를 사건보다 먼저 적용한다.",
+    "4. 요약 메모리 반영: 캐릭터 기억은 주인공과의 최신 관계/심리만 참고하고, 단기 기억은 최근 흐름 보정용으로만 쓴다.",
+    "5. 세계관 영향 체크: 고정 세계관을 유지하면서 이번 입력이 장소, 세력, 규칙, 위험도, 주변 상황에 어떤 영향을 주는지 판정한다.",
+    "6. 사건 생성: 위 1~5를 모두 반영한 뒤에만 다음 사건, NPC 반응, 환경 변화를 생성한다.",
+    "7. 장면 갱신: 이전 응답과 같은 정지 상태를 반복하지 말고 장소, 감정, 관계, 사건 중 적어도 하나를 앞으로 움직인다.",
     "",
     "[입력 해석 규칙]",
     "`*...*` 안의 내용은 명시적인 행동이나 상황 묘사로 최우선 해석한다.",
@@ -53,8 +58,8 @@ export function buildSystemInstruction(params: {
     "   형식: [ #턴번호 | 날씨/상태 이모지 | 날짜 | 현재 장소 | 현재 시각 ]",
     "2. 그 다음에는 본문만 출력한다. INFO 패널, 시스템 설명, 설정 설명은 출력하지 않는다.",
     "3. 본문은 지문과 대사를 섞어 웹소설 한 장면처럼 쓴다.",
-    `4. 목표 분량은 한국어 기준 약 ${targetLength}자다. 너무 짧게 끝내지 말고 8~16문단 안에서 조절한다.`,
-    "5. NPC가 둘 이상 있으면 서로 다른 반응과 대사를 2~4개 이상 섞어 장면을 움직인다.",
+    `4. 목표 분량은 한국어 기준 최소 ${targetLength}자다. 너무 짧게 끝내지 말고 12~22문단 안에서 장면, 반응, 사건을 충분히 쓴다.`,
+    "5. 이번 턴에 실제로 필요한 인물만 말하거나 행동한다. 모든 NPC에게 발언 기회를 주지 않는다.",
     "6. 마지막 문단에는 새 정보, 감정 변화, 행동 압박, 새로운 인물 반응 중 하나를 구체적으로 남긴다.",
     "7. 대사는 반드시 `인물명 | \"대사 내용\"` 형식을 따른다.",
     "",
@@ -163,11 +168,28 @@ function cleanName(value: string) {
 }
 
 function formatCharacter(character: Character) {
+  const referenceRule = buildCharacterReferenceRule(character);
   return [
     `- 이름: ${character.name}`,
     `  소개: ${character.description || "없음"}`,
+    `  성별: ${character.gender || "불명"}`,
+    `  나이: ${character.age || "불명"}`,
+    referenceRule ? `  지칭 규칙: ${referenceRule}` : "",
+    character.roleNote ? `  스토리 내 역할/메모: ${character.roleNote}` : "",
     `  성격: ${character.personality || "불명"}`,
     `  말투: ${character.speechStyle || "불명"}`,
-    `  캐릭터 프롬프트: ${character.prompt || "없음"}`
-  ].join("\n");
+    `  캐릭터 프롬프트(최우선): ${character.prompt || "없음"}`
+  ].filter(Boolean).join("\n");
+}
+
+function buildCharacterReferenceRule(character: Character) {
+  const gender = character.gender.trim();
+  if (!gender) return "";
+  if (/남|male|man|boy/i.test(gender)) {
+    return `지문에서는 '${character.name}' 또는 '${character.name}의 ...'로 지칭한다. '${character.name}'을 '그녀', '여자'로 부르지 않는다.`;
+  }
+  if (/여|female|woman|girl/i.test(gender)) {
+    return `지문에서는 '${character.name}' 또는 '${character.name}의 ...'로 지칭한다. '${character.name}'을 '그', '남자'로 부르지 않는다.`;
+  }
+  return `지문에서는 '${character.name}' 또는 '${character.name}의 ...'로 지칭하고 성별을 임의 추측하지 않는다.`;
 }

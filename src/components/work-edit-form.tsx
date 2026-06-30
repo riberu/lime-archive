@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Save } from "lucide-react";
+import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import type { Character, Story } from "@/lib/types";
 
 type Props =
@@ -29,14 +30,21 @@ export function WorkEditForm(props: Props) {
         : `/api/characters/${props.item.id}`;
 
     startTransition(async () => {
+      const supabase = getSupabaseBrowserClient();
+      const { data } = await supabase?.auth.getSession() ?? { data: { session: null } };
+      const token = data.session?.access_token;
       const response = await fetch(endpoint, {
         method: "PATCH",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {})
+        },
         body: JSON.stringify(payload)
       });
 
       if (!response.ok) {
-        setError("저장하지 못했습니다. 입력값을 확인한 뒤 다시 시도해 주세요.");
+        const data = (await response.json().catch(() => null)) as { error?: string } | null;
+        setError(data?.error ?? "저장하지 못했습니다. 입력값을 확인한 뒤 다시 시도해 주세요.");
         return;
       }
 

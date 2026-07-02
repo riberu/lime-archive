@@ -1,9 +1,10 @@
 import { NextResponse } from "next/server";
 import { getUserFromRequest } from "@/lib/auth";
-import { getSupabaseServerClient } from "@/lib/supabase/server";
 import { getStories } from "@/lib/data";
 import { localStore, nowIso, slugId } from "@/lib/local-store";
-import type { Story } from "@/lib/types";
+import { normalizeStoryStartSettings, serializeStartSettingsForDb } from "@/lib/start-settings";
+import { getSupabaseServerClient } from "@/lib/supabase/server";
+import type { Story, StoryStartSetting } from "@/lib/types";
 
 type StoryPayload = {
   title?: string;
@@ -29,6 +30,7 @@ type StoryPayload = {
   visibility?: "public" | "private";
   creatorId?: string;
   storyCharacters?: StoryCharacterPayload[];
+  startSettings?: StoryStartSetting[];
 };
 
 type StoryCharacterPayload = {
@@ -79,6 +81,7 @@ export async function POST(request: Request) {
       opening_message: story.openingMessage,
       current_scene: story.currentScene,
       status_text: story.statusText,
+      start_settings: serializeStartSettingsForDb(story.startSettings),
       tags: story.tags,
       visibility: story.visibility
     })
@@ -127,9 +130,14 @@ function formDataToStoryPayload(formData: FormData): StoryPayload {
 function normalizeStory(body: StoryPayload): Story {
   const title = clean(body.title) || "Untitled story";
   const assembledPrompt = buildSystemPrompt(body);
-  const systemPrompt =
-    clean(body.system_prompt) ||
-    assembledPrompt;
+  const systemPrompt = clean(body.system_prompt) || assembledPrompt;
+  const legacyStart = {
+    openingMessage: clean(body.opening_message),
+    currentScene: clean(body.current_scene),
+    statusText: clean(body.status_text)
+  };
+  const startSettings = normalizeStoryStartSettings(body.startSettings, legacyStart);
+  const primaryStart = startSettings.find((setting) => setting.mode === "scene");
 
   return {
     id: slugId("story"),
@@ -138,9 +146,10 @@ function normalizeStory(body: StoryPayload): Story {
     description: clean(body.description) || "No description yet.",
     thumbnailUrl: clean(body.thumbnail_url) || "https://images.unsplash.com/photo-1490730141103-6cac27aaab94?auto=format&fit=crop&w=1200&q=80",
     systemPrompt: systemPrompt || "능동적인 롤플레잉 게임마스터로서 장면을 멈추지 않고 자연스럽게 이어간다.",
-    openingMessage: clean(body.opening_message) || `${title} begins in a quiet scene.`,
-    currentScene: clean(body.current_scene) || "The first scene is about to begin.",
-    statusText: clean(body.status_text) || "#001 | Start",
+    openingMessage: primaryStart?.openingMessage || legacyStart.openingMessage || `${title}의 첫 장면이 시작됩니다.`,
+    currentScene: primaryStart?.currentScene || legacyStart.currentScene || "첫 장면이 시작되기 직전입니다.",
+    statusText: primaryStart?.statusText || legacyStart.statusText || "#001 | 시작",
+    startSettings,
     tags: parseTags(body.tags, body.category),
     visibility: body.visibility ?? "private",
     likeCount: 0,
@@ -153,12 +162,7 @@ function parseTags(value?: string | string[], category?: string) {
   const categoryTags = splitTags(clean(category));
   const tags = Array.isArray(value)
     ? [...categoryTags, ...value.map((tag) => tag.trim())]
-    : [
-        ...categoryTags,
-        ...(value ?? "")
-          .split(",")
-          .map((tag) => tag.trim())
-      ];
+    : [...categoryTags, ...(value ?? "").split(",").map((tag) => tag.trim())];
 
   return [...new Set(tags.filter(Boolean))].slice(0, 10);
 }
@@ -191,7 +195,7 @@ function buildSystemPrompt(body: StoryPayload) {
 
   return sections
     .filter(([, content]) => content)
-    .map(([title, content]) => `${title}\n${content}`)
+    .map(([sectionTitle, content]) => `${sectionTitle}\n${content}`)
     .join("\n\n");
 }
 

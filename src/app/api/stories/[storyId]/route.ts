@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { getUserFromRequest } from "@/lib/auth";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
 import { localStore } from "@/lib/local-store";
+import { normalizeStoryStartSettings, serializeStartSettingsForDb } from "@/lib/start-settings";
+import type { StoryStartSetting } from "@/lib/types";
 
 type RouteContext = {
   params: Promise<{ storyId: string }>;
@@ -30,6 +32,7 @@ type StoryUpdatePayload = {
   tags?: string | string[];
   visibility?: "public" | "private";
   storyCharacters?: StoryCharacterPayload[];
+  startSettings?: StoryStartSetting[];
 };
 
 type StoryCharacterPayload = {
@@ -64,6 +67,7 @@ export async function PATCH(request: Request, context: RouteContext) {
       openingMessage: payload.opening_message ?? story.openingMessage,
       currentScene: payload.current_scene ?? story.currentScene,
       statusText: payload.status_text ?? story.statusText,
+      startSettings: payload.start_settings ? normalizeStoryStartSettings(payload.start_settings) : story.startSettings,
       tags: payload.tags ?? story.tags,
       visibility: payload.visibility ?? story.visibility
     });
@@ -108,14 +112,23 @@ export async function DELETE(request: Request, context: RouteContext) {
 }
 
 function normalizePayload(body: StoryUpdatePayload) {
+  const legacyStart = {
+    openingMessage: clean(body.opening_message),
+    currentScene: clean(body.current_scene),
+    statusText: clean(body.status_text)
+  };
+  const startSettings = body.startSettings ? normalizeStoryStartSettings(body.startSettings, legacyStart) : null;
+  const primaryStart = startSettings?.find((setting) => setting.mode === "scene");
+
   return {
     title: clean(body.title),
     description: clean(body.description),
     thumbnail_url: clean(body.thumbnail_url),
     system_prompt: clean(body.system_prompt) || buildSystemPrompt(body),
-    opening_message: clean(body.opening_message),
-    current_scene: clean(body.current_scene),
-    status_text: clean(body.status_text),
+    opening_message: primaryStart?.openingMessage ?? legacyStart.openingMessage,
+    current_scene: primaryStart?.currentScene ?? legacyStart.currentScene,
+    status_text: primaryStart?.statusText ?? legacyStart.statusText,
+    start_settings: startSettings ? serializeStartSettingsForDb(startSettings) : undefined,
     tags: parseTags(body.tags, body.category),
     visibility: body.visibility
   };

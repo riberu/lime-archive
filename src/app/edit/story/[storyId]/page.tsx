@@ -49,6 +49,7 @@ export default async function EditStoryPage({ params }: { params: Promise<{ stor
             rating_note: promptSections["Rating / Operation Note"] ?? "",
             system_prompt: ""
           }}
+          initialStartSettings={story.startSettings}
           initialStoryCast={characters.map((character) => ({
             id: character.id,
             source: "existing",

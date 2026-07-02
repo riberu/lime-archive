@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { Plus } from "lucide-react";
 import { WorkspaceLayout } from "@/components/app-shell";
-import { CharacterCard } from "@/components/content-card";
+import { CharacterCard, WideCharacterCard } from "@/components/content-card";
 import { getCharacters } from "@/lib/data";
 
 export const dynamic = "force-dynamic";
@@ -15,7 +15,7 @@ export default async function CharactersPage() {
   return (
     <WorkspaceLayout>
       <section className="wrap pb-16">
-        <div className="list-top">
+        <div className="list-top catalog-top">
           <div>
             <h1>캐릭터</h1>
             <div className="sub">분류를 골라 그에 맞는 캐릭터를 만나보세요.</div>
@@ -47,17 +47,7 @@ export default async function CharactersPage() {
           </div>
           <div className="best-list">
             {characters.length ? (
-              characters.slice(0, 9).map((character, index) => (
-                <Link key={character.id} href={`/characters/${character.id}`} className="best">
-                  <span className={`rk ${index < 3 ? "top" : ""}`}>{index + 1}</span>
-                  <span className="bav" />
-                  <span className="bi">
-                    <b className="bn">{character.name}</b>
-                    <small className="bm">{character.personality || character.description}</small>
-                  </span>
-                  <span className="star">♡</span>
-                </Link>
-              ))
+              characters.slice(0, 9).map((character, index) => <WideCharacterCard key={character.id} character={character} rank={index + 1} />)
             ) : (
               <p className="empty-line">아직 추천할 캐릭터가 없어요.</p>
             )}

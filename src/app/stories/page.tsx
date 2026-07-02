@@ -15,7 +15,7 @@ export default async function StoriesPage() {
   return (
     <WorkspaceLayout>
       <section className="wrap pb-16">
-        <div className="list-top">
+        <div className="list-top catalog-top">
           <div>
             <h1>스토리</h1>
             <div className="sub">장르를 골라 그 세계의 추천작을 만나보세요.</div>

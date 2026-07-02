@@ -30,6 +30,8 @@ import {
   X
 } from "lucide-react";
 import type { ChatMessage, ChatSession, MemoryEntry, MemoryEntryType, Story } from "@/lib/types";
+import { fallbackSuggestions, outputLengthSteps, type SuggestedReply } from "@/lib/chat-ui-config";
+import { CHAT_MESSAGE_COST } from "@/lib/currency-config";
 import {
   createBlankPersona,
   formatPersonaForPrompt,
@@ -43,18 +45,7 @@ import {
 import { defaultGeminiModelId, geminiModels, type GeminiModelId } from "@/lib/gemini-models";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 
-const outputLengthSteps = [1100, 1300, 1500, 1800, 2200, 2600];
-
-type SuggestedReply = {
-  text: string;
-  kind: "combo";
-};
-
-const fallbackSuggestions: SuggestedReply[] = [
-  { text: "*문틈 너머의 기척을 조심스럽게 살핀다* 정말 관리청에서 나오신 거예요?", kind: "combo" },
-  { text: "*곧장 대답하지 않고 상대의 의도를 먼저 확인한다* 저를 찾아온 이유부터 말해 주세요.", kind: "combo" },
-  { text: "*상대가 내민 신분증으로 시선을 내린다* 이게 진짜라는 걸 어떻게 믿죠?", kind: "combo" }
-];
+const chatCost = CHAT_MESSAGE_COST;
 
 const suggestionMarker = "[[SUGGESTIONS]]";
 const eventPlanMarker = "[[EVENT_PLAN]]";
@@ -83,6 +74,8 @@ export function ChatRoom({
   const [infoOpen, setInfoOpen] = useState(false);
   const [suggestOpen, setSuggestOpen] = useState(false);
   const [streaming, setStreaming] = useState(false);
+  const [wallet, setWallet] = useState<{ paidBalance: number; freeBalance: number; totalBalance: number } | null>(null);
+  const [walletNotice, setWalletNotice] = useState("");
   const [messageMenuId, setMessageMenuId] = useState<string | null>(null);
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
   const [editDraft, setEditDraft] = useState("");
@@ -97,7 +90,7 @@ export function ChatRoom({
   );
   const personaConfigured = isPersonaConfigured(selectedPersona);
   const selectedModel = geminiModels.find((model) => model.id === selectedModelId) ?? geminiModels[0];
-  const canSend = input.trim().length > 0 && !streaming && personaConfigured;
+  const canSend = input.trim().length > 0 && !streaming && personaConfigured && (wallet ? wallet.totalBalance >= chatCost : true);
   const effectiveUserNote = useMemo(
     () => [formatPersonaForPrompt(selectedPersona), userNote.trim() ? `[유저 노트]\n${userNote.trim()}` : ""].filter(Boolean).join("\n\n"),
     [selectedPersona, userNote]
@@ -125,6 +118,20 @@ export function ChatRoom({
       .replaceAll("{{protagonistName}}", name)
       .replaceAll("{{playerName}}", name)
       .replaceAll("{{personaName}}", name);
+  };
+
+  const loadWallet = async (token = authToken) => {
+    if (!token) {
+      setWallet(null);
+      return;
+    }
+    const response = await fetch("/api/wallet", {
+      cache: "no-store",
+      headers: { Authorization: `Bearer ${token}` }
+    }).catch(() => null);
+    if (!response?.ok) return;
+    const data = (await response.json()) as { wallet?: { paidBalance: number; freeBalance: number; totalBalance: number } };
+    setWallet(data.wallet ?? null);
   };
 
   const status = useMemo(
@@ -189,6 +196,10 @@ export function ChatRoom({
   }, [personasLoaded, personaConfigured]);
 
   useEffect(() => {
+    if (authToken) void loadWallet(authToken);
+  }, [authToken]);
+
+  useEffect(() => {
     scrollToBottom(messages.length <= initialMessages.length ? "auto" : "smooth");
   }, [messages, initialMessages.length]);
 
@@ -209,6 +220,10 @@ export function ChatRoom({
     if (!content || streaming) return;
     if (!personaConfigured) {
       setPanelOpen(true);
+      return;
+    }
+    if (wallet && wallet.totalBalance < chatCost) {
+      setWalletNotice("재화가 부족해요. 출석 보상이나 충전 후 다시 시도해 주세요.");
       return;
     }
 
@@ -267,8 +282,8 @@ export function ChatRoom({
       if (!response.ok || !response.body) {
         let message = "응답을 불러오지 못했어요.";
         try {
-          const payload = (await response.json()) as { error?: string };
-          if (payload.error) message = payload.error;
+          const payload = (await response.json()) as { error?: string; message?: string };
+          if (payload.message || payload.error) message = payload.message ?? payload.error ?? message;
         } catch {
           message = await response.text().catch(() => message);
         }
@@ -287,8 +302,16 @@ export function ChatRoom({
           )
         );
       }
+      setWalletNotice("");
+      void loadWallet();
+      window.dispatchEvent(new Event("lime-wallet-refresh"));
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : "Gemini API 키 또는 서버 로그를 확인해 주세요.";
+      if (errorMessage.includes("Lime Point") || errorMessage.includes("not_enough_currency") || errorMessage.includes("부족")) {
+        setWalletNotice(errorMessage);
+        void loadWallet();
+        window.dispatchEvent(new Event("lime-wallet-refresh"));
+      }
       setMessages((current) =>
         current.map((message) =>
           message.id === targetAssistantId
@@ -510,7 +533,11 @@ export function ChatRoom({
           <div className="chat-stream">
             {messages.length === 0 ? (
               <article className="story-entry ai">
+                {getStartMode(session.episodeState) === "free" ? (
+                  <StoryText text={renderPersonaTemplate(getEmptyChatGuide(session.episodeState))} />
+                ) : (
                 <StoryText text={renderPersonaTemplate(story.openingMessage || "첫 장면을 시작해 보세요. 짧게 인사해도 GM이 다음 사건을 이어갑니다.")} />
+                )}
               </article>
             ) : (
               messages.map((message) => (
@@ -653,6 +680,12 @@ export function ChatRoom({
             >
               <Sparkles size={15} /> 추천
             </button>
+          </div>
+
+          <div className={`chat-wallet-strip ${wallet && wallet.totalBalance < chatCost ? "is-low" : ""}`}>
+            <span>1회 생성 {chatCost.toLocaleString("ko-KR")} 재화</span>
+            <b>보유 {wallet ? wallet.totalBalance.toLocaleString("ko-KR") : "-"} </b>
+            {walletNotice ? <em>{walletNotice}</em> : <small>무료 재화가 먼저 차감돼요</small>}
           </div>
 
           <div className="composer">
@@ -1261,6 +1294,18 @@ const memoryTypeLabels: Record<MemoryEntryType, string> = {
   character: "캐릭터 기억",
   location: "장소 기억"
 };
+
+function getStartMode(value: Record<string, unknown> | null | undefined) {
+  return typeof value?.startMode === "string" ? value.startMode : "";
+}
+
+function getEmptyChatGuide(value: Record<string, unknown> | null | undefined) {
+  const guide = typeof value?.startGuide === "string" ? value.startGuide.trim() : "";
+  return [
+    "자유시작입니다. 첫 메시지에 대사나 행동을 입력하면 그 내용부터 이야기가 시작됩니다.",
+    guide
+  ].filter(Boolean).join("\n\n");
+}
 
 function groupMemoriesForView(type: MemoryEntryType, memories: MemoryEntry[]) {
   if (type === "short") {

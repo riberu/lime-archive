@@ -128,13 +128,13 @@ const characters = [
     prompt: "ENTP. 혈통은 순수 동양계 백룡. 능력은 빛. DMA 수장으로 미등록 대상자의 상태를 단순 사건이 아닌 조직 전체의 변수로 본다."
   },
   {
-    name: "목유",
+    name: "묵유",
     role: "작전국 1급 국장",
     sort_order: 2,
     description: "455세 하프 동양계 흑룡. 작전국 1급 국장이며 조직 내 엄마 포지션이다.",
     personality: "다정함, 강단, 내재된 냉기, 챙김 본능. 필요하면 엄격하다.",
     speech_style: "상냥하지만 명령은 또렷하다. 웃으면서도 현장 통제를 놓치지 않는다.",
-    first_message: '목유 | "겁먹지 않아도 돼. 우린 확인하러 온 거지, 잡아가러 온 게 아니니까."',
+    first_message: '묵유 | "겁먹지 않아도 돼. 우린 확인하러 온 거지, 잡아가러 온 게 아니니까."',
     prompt: "ISFJ. 능력은 어둠. 연갈색 단발, 흑안, 검은 용뿔과 꼬리. 미등록 대상자가 위험해지지 않도록 현장 분위기를 조율한다."
   },
   {
@@ -228,7 +228,7 @@ const characterDetails = {
     personality: "의뭉스러움, 장난기, 유치함, 여유",
     speechStyle: "부드럽고 느긋하며, 중요한 말도 농담처럼 꺼내 상대를 흔든다."
   },
-  "목유": {
+  "묵유": {
     mbti: "ISFJ",
     bloodline: "하프 동양계 흑룡",
     appearance: "연갈색 단발, 순한 흑안, 검은 용뿔과 꼬리, 갈색 저지와 흰색 앞치마",
@@ -302,6 +302,19 @@ const characterDetails = {
   }
 };
 
+const characterImageUrls = {
+  백려: "/images/dma/characters/baekryeo.png",
+  묵유: "/images/dma/characters/mukyu.png",
+  금황: "/images/dma/characters/geumhwang.png",
+  청룡: "/images/dma/characters/cheongryong.png",
+  카민: "/images/dma/characters/kamin.png",
+  시칠: "/images/dma/characters/sichil.png",
+  청준: "/images/dma/characters/cheongjun.png",
+  스파인: "/images/dma/characters/spine.png",
+  비시: "/images/dma/characters/bisi.png",
+  페이: "/images/dma/characters/pei.png"
+};
+
 async function findStoryId() {
   const { data: known } = await supabase.from("stories").select("id").eq("id", knownDemoStoryId).maybeSingle();
   if (known?.id) return known.id;
@@ -358,7 +371,7 @@ async function upsertDemoContent() {
       ]
         .filter(Boolean)
         .join("\n"),
-      avatar_url: "",
+      avatar_url: characterImageUrls[character.name] ?? "",
       personality: detail.personality || character.personality,
       speech_style: detail.speechStyle || character.speech_style,
       first_message: character.first_message,

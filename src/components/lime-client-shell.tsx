@@ -1,16 +1,27 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { MessageCircle, Moon, MoreVertical, Pencil, Pin, PinOff, Plus, Sun, Trash2, X } from "lucide-react";
+import { CalendarCheck, Coins, Gem, MessageCircle, Moon, MoreVertical, Pencil, Pin, PinOff, Plus, Sun, Trash2, X } from "lucide-react";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 
 type ChatListItem = {
   id: string;
   title: string;
   storyTitle?: string;
+  imageUrl?: string;
+  imageKind?: "story" | "character";
   updatedAt?: string;
   pinned?: boolean;
+};
+
+type WalletPayload = {
+  wallet?: {
+    paidBalance: number;
+    freeBalance: number;
+    totalBalance: number;
+  };
 };
 
 export function ThemeToggle() {
@@ -33,6 +44,136 @@ export function ThemeToggle() {
     <button type="button" className="ui-icon-btn" onClick={toggle} aria-label="테마 변경">
       {dark ? <Sun size={17} /> : <Moon size={17} />}
     </button>
+  );
+}
+
+export function WalletBadge() {
+  const [authToken, setAuthToken] = useState("");
+  const [wallet, setWallet] = useState<WalletPayload["wallet"] | null>(null);
+  const [open, setOpen] = useState(false);
+  const [claiming, setClaiming] = useState(false);
+  const [message, setMessage] = useState("");
+  const rootRef = useRef<HTMLDivElement>(null);
+
+  const loadWallet = useCallback(async (token = authToken) => {
+    if (!token) {
+      setWallet(null);
+      return;
+    }
+
+    const response = await fetch("/api/wallet", {
+      cache: "no-store",
+      headers: { Authorization: `Bearer ${token}` }
+    }).catch(() => null);
+    if (!response?.ok) return;
+    const data = (await response.json()) as WalletPayload;
+    setWallet(data.wallet ?? null);
+  }, [authToken]);
+
+  useEffect(() => {
+    const supabase = getSupabaseBrowserClient();
+    void (async () => {
+      const session = supabase ? (await supabase.auth.getSession()).data.session : null;
+      const token = session?.access_token ?? "";
+      setAuthToken(token);
+      await loadWallet(token);
+    })();
+
+    if (!supabase) return;
+    const { data } = supabase.auth.onAuthStateChange((_event, session) => {
+      const token = session?.access_token ?? "";
+      setAuthToken(token);
+      if (!token) setWallet(null);
+      void loadWallet(token);
+    });
+
+    return () => data.subscription.unsubscribe();
+  }, [loadWallet]);
+
+  useEffect(() => {
+    const refresh = () => void loadWallet();
+    window.addEventListener("lime-wallet-refresh", refresh);
+    return () => window.removeEventListener("lime-wallet-refresh", refresh);
+  }, [loadWallet]);
+
+  useEffect(() => {
+    if (!open) return;
+
+    const close = (event: PointerEvent) => {
+      const target = event.target;
+      if (target instanceof Node && rootRef.current?.contains(target)) return;
+      setOpen(false);
+    };
+
+    document.addEventListener("pointerdown", close);
+    return () => document.removeEventListener("pointerdown", close);
+  }, [open]);
+
+  async function claimAttendance() {
+    if (!authToken || claiming) return;
+    setClaiming(true);
+    setMessage("");
+    try {
+      const response = await fetch("/api/wallet/attendance", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${authToken}` }
+      });
+      const data = (await response.json().catch(() => null)) as {
+        claimed?: boolean;
+        rewardAmount?: number;
+        bonusAmount?: number;
+        message?: string;
+        wallet?: WalletPayload["wallet"];
+        error?: string;
+      } | null;
+      if (!response.ok) throw new Error(data?.error ?? "출석 보상을 받지 못했어요.");
+      if (data?.wallet) setWallet(data.wallet);
+      setMessage(data?.claimed ? `오늘 보상 ${formatCurrency((data.rewardAmount ?? 0) + (data.bonusAmount ?? 0))} LP 지급` : "오늘 출석 보상은 이미 받았어요.");
+      window.dispatchEvent(new Event("lime-wallet-refresh"));
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "출석 보상을 받지 못했어요.");
+    } finally {
+      setClaiming(false);
+    }
+  }
+
+  if (!authToken) return null;
+
+  return (
+    <div ref={rootRef} className="wallet-widget">
+      <button type="button" className="wallet-pill" onClick={() => setOpen((current) => !current)} aria-label="재화 잔액">
+        <span className="wallet-pill-icon"><Coins size={15} /></span>
+        <span>{formatCurrency(wallet?.freeBalance ?? 0)}</span>
+        <small>LP</small>
+      </button>
+
+      {open ? (
+        <section className="wallet-popover" aria-label="재화 지갑">
+          <header>
+            <div>
+              <b>내 지갑</b>
+              <span>무료 재화가 먼저 차감돼요</span>
+            </div>
+            <Link href="/wallet" onClick={() => setOpen(false)}>상세</Link>
+          </header>
+          <div className="wallet-grid">
+            <div>
+              <span><Coins size={15} /> Lime Point</span>
+              <b>{formatCurrency(wallet?.freeBalance ?? 0)}</b>
+            </div>
+            <div>
+              <span><Gem size={15} /> Lime Coin</span>
+              <b>{formatCurrency(wallet?.paidBalance ?? 0)}</b>
+            </div>
+          </div>
+          <button type="button" className="wallet-attendance" onClick={claimAttendance} disabled={claiming}>
+            <CalendarCheck size={15} />
+            {claiming ? "확인 중..." : "오늘 출석 보상 받기"}
+          </button>
+          <p>{message || "채팅 1회 생성에는 30 재화가 사용됩니다."}</p>
+        </section>
+      ) : null}
+    </div>
   );
 }
 
@@ -161,7 +302,7 @@ export function LimeFloatingChat() {
               <div key={chat.id} className={`fab-row ${chat.pinned ? "is-pinned" : ""}`}>
                 <Link href={`/chat/${chat.id}`} className="fab-item" onClick={() => setOpenMenuId(null)}>
                   <span className="fab-avatar">
-                    <MessageCircle size={16} />
+                    {chat.imageUrl ? <Image src={chat.imageUrl} alt="" fill sizes="38px" className="object-cover" /> : <MessageCircle size={16} />}
                   </span>
                   <span className="fab-meta">
                     <b>
@@ -226,4 +367,8 @@ function formatDate(value?: string) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "최근 대화";
   return new Intl.DateTimeFormat("ko-KR", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }).format(date);
+}
+
+function formatCurrency(value: number) {
+  return Math.trunc(value).toLocaleString("ko-KR");
 }

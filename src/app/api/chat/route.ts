@@ -3,10 +3,12 @@ import { getCharacters, getMessages, getSession, getStory } from "@/lib/data";
 import { localStore, nowIso, slugId } from "@/lib/local-store";
 import { resolveGeminiModelId } from "@/lib/gemini-models";
 import { generateGeminiContent, getGeminiApiKeys } from "@/lib/gemini-router";
+import { assertEnoughBalance, isInsufficientBalanceError, refundSpend, spendCurrency, type SpendResult } from "@/lib/currency";
+import { CHAT_MESSAGE_COST } from "@/lib/currency-config";
 import { buildPromptMemorySummary, recordMemoriesFromPlan, recordMemoriesFromTurn } from "@/lib/memories";
 import { buildSystemInstruction, extractProtagonistName, toGeminiContents } from "@/lib/prompt";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
-import type { Character, ChatMessage } from "@/lib/types";
+import type { ChatMessage } from "@/lib/types";
 import type { EventPlan } from "@/lib/memories";
 
 export const runtime = "nodejs";
@@ -68,6 +70,40 @@ export async function POST(request: Request) {
   }
 
   const model = resolveGeminiModelId(body.modelId);
+  const supabase = getSupabaseServerClient();
+  let chatSpend: SpendResult | null = null;
+  if (supabase && isUuid(context.userId) && body.persistUser !== false) {
+    try {
+      await assertEnoughBalance(supabase, context.userId, CHAT_MESSAGE_COST);
+      chatSpend = await spendCurrency(supabase, {
+        userId: context.userId,
+        amount: CHAT_MESSAGE_COST,
+        reason: "AI chat message generation",
+        referenceType: "chat_session",
+        referenceId: body.sessionId,
+        idempotencyKey: body.userMessageId ? `chat:${body.sessionId}:${body.userMessageId}` : undefined,
+        metadata: {
+          storyId: context.story.id,
+          model,
+          cost: CHAT_MESSAGE_COST,
+          replaceMessageId: body.replaceMessageId ?? null
+        }
+      });
+    } catch (error) {
+      if (isInsufficientBalanceError(error)) {
+        return NextResponse.json(
+          {
+            error: "not_enough_currency",
+            cost: CHAT_MESSAGE_COST,
+            message: "Lime Point 또는 Lime Coin이 부족합니다."
+          },
+          { status: 402 }
+        );
+      }
+      return NextResponse.json({ error: error instanceof Error ? error.message : "Currency spend failed" }, { status: 500 });
+    }
+  }
+
   const response = await generateGeminiContent({
     model,
     assignmentKey: context.assignmentKey,
@@ -88,6 +124,7 @@ export async function POST(request: Request) {
   });
 
   if (!response.ok) {
+    await refundChatSpend(supabase, context.userId, chatSpend, "Gemini request failed", response.detail);
     console.error("Gemini request failed", response.status, response.detail);
     return NextResponse.json({ error: `Gemini request failed: ${response.status}` }, { status: 502 });
   }
@@ -99,6 +136,7 @@ export async function POST(request: Request) {
       .trim() ?? "";
 
   if (!fullText) {
+    await refundChatSpend(supabase, context.userId, chatSpend, "Gemini returned empty text", response.data);
     console.error("Gemini returned empty text", response.data);
     return NextResponse.json({ error: "Gemini returned empty text" }, { status: 502 });
   }
@@ -137,107 +175,6 @@ function cleanProtagonistName(value?: string) {
   const cleaned = (value ?? "").trim();
   if (!cleaned || cleaned === "기본 페르소나" || cleaned === "주인공" || cleaned === "대표 페르소나") return "";
   return cleaned;
-}
-
-async function createEventPlan({
-  model,
-  assignmentKey,
-  context,
-  content,
-  protagonistName
-}: {
-  model: string;
-  assignmentKey: string;
-  context: Awaited<ReturnType<typeof loadChatContext>>;
-  content: string;
-  protagonistName: string;
-}): Promise<EventPlan | null> {
-  const response = await generateGeminiContent({
-    model,
-    assignmentKey: `${assignmentKey}:plan`,
-    payload: {
-      systemInstruction: {
-        parts: [{ text: buildEventPlanInstruction() }]
-      },
-      contents: [
-        {
-          role: "user",
-          parts: [{
-            text: [
-              `[작품] ${context.story.title}`,
-              `[주인공] ${protagonistName}`,
-              `[현재 장면] ${context.currentScene}`,
-              `[등장인물]\n${context.characters.map(formatCharacterForPlan).join("\n") || "없음"}`,
-              `[요약 메모리] ${context.memorySummary || "없음"}`,
-              `[최근 대화]`,
-              context.messages.slice(-8).map((message) => `${message.role}: ${trimToLength(message.content, 500)}`).join("\n\n"),
-              `[새 사용자 입력]`,
-              content
-            ].join("\n\n")
-          }]
-        }
-      ],
-      generationConfig: {
-        temperature: 0.25,
-        topP: 0.8,
-        maxOutputTokens: 900,
-        responseMimeType: "application/json",
-        thinkingConfig: {
-          thinkingBudget: 0
-        }
-      }
-    }
-  });
-
-  if (!response.ok) {
-    console.warn("Event plan request failed", response.status, response.detail);
-    return null;
-  }
-
-  const text = response.data.candidates?.[0]?.content?.parts?.map((part) => part.text ?? "").join("").trim() ?? "";
-  return normalizeEventPlan(parseJsonObject(text), context.currentScene);
-}
-
-function buildEventPlanInstruction() {
-  return [
-    "너는 인터랙티브 웹소설의 사건 설계자다.",
-    "사용자 입력이 세계관에 끼치는 영향과 다음 장면에서 실제 발생할 사건을 짧은 JSON으로만 작성한다.",
-    "완성 본문을 쓰지 않는다. 설명문, 마크다운, 코드블록 없이 JSON 객체만 출력한다.",
-    "",
-    "판단 순서:",
-    "1. 유저노트/주인공 대화 프로필을 최우선으로 읽고, 주인공이 실제로 말하거나 행동한 것만 기준으로 삼는다.",
-    "2. 이번 턴에 등장할 캐릭터를 고를 때 캐릭터 성격/말투/스토리 내 역할/캐릭터 프롬프트와 요약 메모리의 최신 관계를 사건보다 먼저 반영한다.",
-    "3. 그 다음 이번 채팅 입력이 세계관, 장소, 세력, 위험도, 주변 상황에 끼친 영향을 판단한다.",
-    "4. 위 판단이 끝난 뒤에만 다음 사건과 activeCharacters를 정한다.",
-    "",
-    "규칙:",
-    "- 캐릭터 기억은 주인공과의 관계/태도/심리 변화가 있을 때만 changed=true.",
-    "- 캐릭터 기억에는 타 인물과의 관계를 저장하지 않는다. 주인공과의 관계, 심리/태도 변화만 기록한다.",
-    "- 이름이 언급되었다는 이유만으로 characterMemories에 넣지 않는다.",
-    "- 장소 기억은 사건이 실제로 벌어진 물리적 배경 장소만 저장한다.",
-    "- 기관명, 단체명, 회사명, 관리청, 부서명, 세계관 고유명사는 언급되어도 장소 기억의 name이 될 수 없다.",
-    "- 예: 도심 한복판에서 DMA가 언급되었다면 locationMemory.name은 DMA가 아니라 도심 한복판이다.",
-    "- 장소 기억은 그 장소에서 주인공에게 남은 일, 감정, 위협, 단서, 흔적이 있을 때만 changed=true.",
-    "- locationMemory.summary는 장소 설명이 아니라 '이 장소에서 주인공에게 무엇이 남았는가'를 짧게 쓴다.",
-    "- activeCharacters는 이번 턴에 실제로 대사/행동할 인물만 1~3명으로 제한한다.",
-    "- forbiddenSpeakers에는 이번 턴에 말하면 안 되는 배경 인물을 넣는다.",
-    "",
-    "스키마:",
-    `{"event":"짧은 사건","worldImpact":"세계관 영향","nextIncident":"이번 응답에서 발생시킬 다음 사건","activeCharacters":["이름"],"silentCharacters":["이름"],"forbiddenSpeakers":["이름"],"characterMemories":[{"name":"이름","relationshipToProtagonist":"주인공과의 관계 변화","psychology":"심리/태도 변화","changed":true,"confidence":0.8}],"locationMemory":{"name":"장소","summary":"이 장소에서 주인공에게 남은 기억/감정/단서","changed":true,"confidence":0.8}}`
-  ].join("\n");
-}
-
-function formatCharacterForPlan(character: Character) {
-  return [
-    `- ${character.name}`,
-    character.gender ? `  성별: ${character.gender}` : "",
-    character.age ? `  나이: ${character.age}` : "",
-    character.roleNote ? `  스토리 내 역할/메모: ${trimToLength(character.roleNote, 220)}` : "",
-    character.description ? `  소개: ${trimToLength(character.description, 180)}` : "",
-    character.personality ? `  성격: ${trimToLength(character.personality, 220)}` : "",
-    character.speechStyle ? `  말투: ${trimToLength(character.speechStyle, 180)}` : "",
-    character.prompt ? `  캐릭터 프롬프트: ${trimToLength(character.prompt, 360)}` : ""
-  ].filter(Boolean).join("\n");
 }
 
 function parseJsonObject(text: string) {
@@ -429,17 +366,6 @@ function buildFallbackSuggestions(userContent: string, eventPlan?: EventPlan | n
   ];
 }
 
-function appendInlineSuggestions(text: string, userContent: string, eventPlan?: EventPlan | null) {
-  if (parseInlineSuggestions(text).length >= 3) return text;
-  const direction = eventPlan?.nextIncident ? `*${eventPlan.nextIncident}에 반응한다*` : "*상대의 반응을 살피며 한 걸음 물러선다*";
-  const fallback = [
-    `${direction} 지금 무슨 일이 벌어진 건지 설명해 주세요.`,
-    "*주변의 기척을 확인하며 낮게 묻는다* 아직 숨기는 게 더 있나요?",
-    `*방금 한 말을 되짚으며 시선을 고정한다* ${trimToLength(userContent, 42)}`
-  ];
-  return `${text.trim()}\n\n[[SUGGESTIONS]]\n${fallback.map((item, index) => `${index + 1}. ${item}`).join("\n")}`;
-}
-
 function parseInlineSuggestions(text: string) {
   const marker = "[[SUGGESTIONS]]";
   const index = text.lastIndexOf(marker);
@@ -490,6 +416,7 @@ async function loadChatContext(body: ChatRequest) {
   return {
     story,
     characters,
+    userId: session.userId,
     assignmentKey: session.userId && session.userId !== "anonymous" ? session.userId : session.id,
     userNote: body.userNote || session.userNote || "",
     currentScene: session.currentScene || story.currentScene,
@@ -533,6 +460,26 @@ async function persistMessage(sessionId: string, role: "user" | "assistant", con
     role,
     content
   });
+}
+
+async function refundChatSpend(
+  supabase: ReturnType<typeof getSupabaseServerClient>,
+  userId: string,
+  spend: SpendResult | null,
+  reason: string,
+  detail: unknown
+) {
+  if (!supabase || !spend || !isUuid(userId)) return;
+
+  await refundSpend(supabase, {
+    userId,
+    spend,
+    reason,
+    idempotencyKey: `refund:${spend.transactionId}`,
+    metadata: {
+      detail: typeof detail === "string" ? detail.slice(0, 1000) : detail
+    }
+  }).catch((error) => console.error("Failed to refund chat spend", error));
 }
 
 async function updateMessageContent(messageId: string, content: string) {
@@ -580,204 +527,6 @@ function streamText(
   });
 
   return textStreamResponse(stream);
-}
-
-function buildLocalFallback(content: string, context: Awaited<ReturnType<typeof loadChatContext>>) {
-  const parsed = parseUserInput(content);
-  const turn = context.messages.length + 1;
-  const scene = sanitizeNarration(context.currentScene || context.story.currentScene || "현재 장면이 아직 정해지지 않았다.", extractProtagonistName(context.userNote));
-  const speaker = extractProtagonistName(context.userNote);
-  const npcName = context.characters[0]?.name || "등장인물";
-  const secondNpcName = context.characters.find((character) => character.name !== npcName)?.name;
-  const place = extractHeaderPlace(scene);
-  const subject = `${speaker}${hasFinalConsonant(speaker) ? "은" : "는"}`;
-  const actionLine = parsed.actions.length
-    ? `${subject} ${joinKorean(parsed.actions)}.`
-    : `${speaker}의 말이 조용히 공기 속으로 번졌다.`;
-  const dialogueLines = parsed.dialogues.length
-    ? parsed.dialogues.map((dialogue) => `${speaker} | "${trimSentence(dialogue)}"`).join("\n\n")
-    : "";
-  const sceneSetup = buildSceneSetup(scene, speaker, npcName);
-  const inputEffect = buildInputEffect(parsed, speaker, npcName);
-  const npcResponse = buildNpcResponse(parsed, speaker, npcName, secondNpcName);
-  const eventBeat = buildEventBeat(scene, npcName, secondNpcName);
-
-  return [
-    `[ #${turn} | 🌙 | 📅 현재 | 📍 ${place} | ⏰ 지금 ]`,
-    "",
-    sceneSetup,
-    "",
-    actionLine,
-    "",
-    dialogueLines,
-    "",
-    inputEffect,
-    "",
-    npcResponse,
-    "",
-    eventBeat
-  ]
-    .filter((line, index, lines) => line || lines[index - 1] !== "")
-    .join("\n");
-}
-
-function parseUserInput(content: string) {
-  const actions: string[] = [];
-  const dialogues: string[] = [];
-  const actionPattern = /\*([^*]+)\*/g;
-  let lastIndex = 0;
-  let match: RegExpExecArray | null;
-
-  while ((match = actionPattern.exec(content)) !== null) {
-    const before = content.slice(lastIndex, match.index).trim();
-    addParsedChunk(before, actions, dialogues);
-    actions.push(normalizeAction(match[1]));
-    lastIndex = match.index + match[0].length;
-  }
-
-  const rest = content.slice(lastIndex).trim();
-  addParsedChunk(rest, actions, dialogues);
-
-  if (!actions.length && looksLikeAction(content)) {
-    actions.push(normalizeAction(content));
-    return { actions, dialogues: [] };
-  }
-
-  return { actions, dialogues };
-}
-
-function looksLikeAction(content: string) {
-  return /(한다|했다|된다|됐다|묻는다|되묻는다|기다린다|살핀다|바라본다|간다|갔다|본다|봤다|연다|열었다|닫는다|닫았다|걷는다|다가간다|앉는다|일어난다|고개|손|문|시선|주변|반응|의도|분위기)/.test(content);
-}
-
-function addParsedChunk(chunk: string, actions: string[], dialogues: string[]) {
-  if (!chunk) return;
-  if (looksLikeAction(chunk) && !/[?？!！"“”]/.test(chunk)) {
-    actions.push(normalizeAction(chunk));
-    return;
-  }
-  dialogues.push(chunk);
-}
-
-function normalizeAction(action: string) {
-  const cleaned = action.trim().replace(/[.。]+$/g, "");
-  if (/문.*(연다|열|나간다|나가)/.test(cleaned)) {
-    return "문을 열고 나가려다 잠시 멈춰 섰다";
-  }
-  if (/고개.*(든다|들|돌린다|돌)/.test(cleaned)) {
-    return "고개를 들어 앞에 선 인물을 바라보았다";
-  }
-  if (/다가간다|다가섰/.test(cleaned)) {
-    return "한 걸음 가까이 다가섰다";
-  }
-  return cleaned;
-}
-
-function extractHeaderPlace(scene: string) {
-  const clean = scene.replace(/\s+/g, " ").trim();
-  const placePatterns = [
-    /(?:에서|장소[:：]\s*)([^.。,\n]+(?:실|방|앞|안|밖|저|홀|궁|성|거리|정원|복도|문가|저택|공작저))/,
-    /(접견실|응접실|현관문 앞|자택 앞|복도|정원|공작저|왕궁|저택|거리|방 안|문 앞)/
-  ];
-
-  for (const pattern of placePatterns) {
-    const match = clean.match(pattern);
-    if (match?.[1]) return match[1].replace(/^(현재|지금)\s*/, "").trim();
-    if (match?.[0]) return match[0].trim();
-  }
-
-  return clean.split(/[.。,\n]/)[0]?.slice(0, 28) || "현재 장소";
-}
-
-function buildSceneSetup(scene: string, protagonistName: string, npcName: string) {
-  if (/계약|약혼|공작|접견/.test(scene)) {
-    return `접견실의 공기는 말끔하게 정돈되어 있었지만, 탁자 위에 놓인 계약서는 아직 마지막 서명을 기다리고 있었다. ${npcName}${hasFinalConsonant(npcName) ? "은" : "는"} 감정을 접어 둔 얼굴로 ${protagonistName}을 바라보았고, 은제 펜촉 끝에는 짧은 침묵이 맺혀 있었다.`;
-  }
-  if (/문|현관|방문/.test(scene)) {
-    return `문 너머의 기척이 가까워질수록 장면의 숨이 얕아졌다. 닫힌 문과 열린 틈 사이에서 ${npcName}의 시선이 조용히 움직였고, ${protagonistName}의 다음 반응을 기다리는 공기가 미세하게 굳었다.`;
-  }
-  return `${scene} ${npcName}${hasFinalConsonant(npcName) ? "은" : "는"} 그 흐름이 끊기지 않도록 숨을 고르며 ${protagonistName}의 반응을 살폈다.`;
-}
-
-function buildInputEffect(parsed: ReturnType<typeof parseUserInput>, protagonistName: string, npcName: string) {
-  if (parsed.actions.length && parsed.dialogues.length) {
-    return `${protagonistName}의 말과 움직임이 동시에 떨어지자, ${npcName}의 표정에 아주 작은 균열이 생겼다. 대답을 기다리던 정적은 더 이상 같은 모양으로 머물지 못했고, 방금의 행동이 장면의 방향을 한 칸 앞으로 밀어냈다.`;
-  }
-  if (parsed.actions.length) {
-    return `${protagonistName}의 행동은 말보다 먼저 장면에 닿았다. ${npcName}${hasFinalConsonant(npcName) ? "은" : "는"} 그 움직임의 의미를 읽으려는 듯 시선을 낮췄다가, 곧장 다시 들어 올렸다.`;
-  }
-  return `${protagonistName}의 말이 끝나자, ${npcName}의 눈빛이 잠깐 흔들렸다. 방금의 문장은 단순한 대답이라기보다, 이 관계의 다음 조건을 다시 묻는 신호처럼 공기 중에 남았다.`;
-}
-
-function buildNpcResponse(
-  parsed: ReturnType<typeof parseUserInput>,
-  protagonistName: string,
-  npcName: string,
-  secondNpcName?: string
-) {
-  const hasQuestion = parsed.dialogues.some((dialogue) => /[?？]/.test(dialogue));
-  const hasContractScene = parsed.actions.concat(parsed.dialogues).join(" ").match(/계약|약혼|서명|조건|설명|뜻|의도/);
-
-  if (hasContractScene) {
-    return [
-      `${npcName} | "좋습니다. 그럼 돌려 말하지 않겠습니다. 이 계약은 ${protagonistName}을 묶어 두기 위한 장식이 아니라, 제 쪽에서도 물러설 수 없는 방패입니다."`,
-      "",
-      `${npcName}${hasFinalConsonant(npcName) ? "은" : "는"} 계약서의 첫 장을 천천히 넘겼다. 종이가 스치는 소리가 접견실 안에서 유난히 선명하게 들렸다.`,
-      "",
-      `${npcName} | "다만 서명하기 전에 하나는 확인해야 합니다. ${protagonistName}, 이 약혼을 이용할 생각입니까, 아니면 버틸 생각입니까?"`
-    ].join("\n");
-  }
-
-  if (hasQuestion) {
-    return [
-      `${npcName}${hasFinalConsonant(npcName) ? "은" : "는"} 바로 대답하지 않았다. 질문의 표면보다 그 안쪽에 숨은 경계심을 먼저 읽는 듯했다.`,
-      "",
-      `${npcName} | "그 질문에 답하면, 당신도 제게 하나는 답해야 합니다. 지금 가장 두려운 게 뭡니까?"`
-    ].join("\n");
-  }
-
-  if (secondNpcName) {
-    return [
-      `${npcName}의 침묵이 길어지려는 순간, ${secondNpcName}${hasFinalConsonant(secondNpcName) ? "이" : "가"} 먼저 숨을 들이켰다.`,
-      "",
-      `${secondNpcName} | "잠깐. 지금 그 반응, 그냥 넘기면 안 될 것 같은데요."`,
-      "",
-      `${npcName} | "나도 알아. 그래서 더 서두르지 않는 겁니다."`
-    ].join("\n");
-  }
-
-  return [
-    `${npcName}${hasFinalConsonant(npcName) ? "은" : "는"} 손끝으로 탁자의 모서리를 한 번 눌렀다. 침착한 동작이었지만, 그 짧은 힘에는 숨긴 초조함이 배어 있었다.`,
-    "",
-    `${npcName} | "방금의 반응은 대답으로 받아들이기 어렵군요. 하지만 아무 말도 하지 않은 것보다는 훨씬 많은 걸 말했습니다."`
-  ].join("\n");
-}
-
-function buildEventBeat(scene: string, npcName: string, secondNpcName?: string) {
-  if (/계약|약혼|공작|접견/.test(scene)) {
-    return `그때 접견실 바깥에서 짧은 노크가 울렸다. 문이 열리기도 전에 봉인된 서류 봉투 하나가 문틈 아래로 밀려 들어왔다. 봉투 위에는 ${npcName}의 문장이 찍혀 있었지만, 봉랍은 이미 반쯤 금이 가 있었다.`;
-  }
-  if (/문|현관|방문/.test(scene)) {
-    return `문밖 복도에서 다른 발소리가 하나 더 겹쳐졌다. ${secondNpcName ?? npcName}${hasFinalConsonant(secondNpcName ?? npcName) ? "은" : "는"} 그 소리를 듣자마자 표정을 굳혔고, 아직 끝나지 않은 대화 위로 새로운 긴장이 내려앉았다.`;
-  }
-  return `정적이 다시 내려앉기 전, 가까운 곳에서 금속이 맞부딪히는 소리가 났다. ${npcName}${hasFinalConsonant(npcName) ? "은" : "는"} 고개를 돌렸고, 방금까지 미뤄 두었던 선택이 더 이상 미뤄질 수 없다는 듯 공기가 바뀌었다.`;
-}
-
-function trimSentence(dialogue: string) {
-  return dialogue.replace(/^["“]|["”]$/g, "").trim();
-}
-
-function joinKorean(actions: string[]) {
-  if (actions.length === 1) return actions[0];
-  return actions.slice(0, -1).join(", ") + " 그리고 " + actions[actions.length - 1];
-}
-
-function hasFinalConsonant(value: string) {
-  const last = value.trim().at(-1);
-  if (!last) return false;
-  const code = last.charCodeAt(0);
-  if (code < 0xac00 || code > 0xd7a3) return false;
-  return (code - 0xac00) % 28 !== 0;
 }
 
 function sanitizeNarration(text: string, protagonistName: string) {

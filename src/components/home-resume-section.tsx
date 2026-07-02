@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { ChevronRight, MessageCircle, Pin } from "lucide-react";
@@ -9,6 +10,8 @@ type RecentChat = {
   id: string;
   title: string;
   storyTitle?: string;
+  imageUrl?: string;
+  imageKind?: "story" | "character";
   updatedAt?: string;
   pinned?: boolean;
 };
@@ -72,7 +75,7 @@ export function HomeResumeSection() {
         {items.map((chat) => (
           <Link key={chat.id} href={`/chat/${chat.id}`} className="resume">
             <span className="av">
-              <MessageCircle size={18} />
+              {chat.imageUrl ? <Image src={chat.imageUrl} alt="" fill sizes="46px" className="object-cover" /> : <MessageCircle size={18} />}
             </span>
             <span className="ri">
               <b className="rn">

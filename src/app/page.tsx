@@ -28,9 +28,14 @@ export default async function HomePage() {
             <span className="hh-tag">이번 주의 이야기</span>
             <h1>{heroStory?.title || "라임에서 첫 이야기를 시작해 보세요"}</h1>
             <p>{heroStory?.description || "마음에 드는 세계관을 고르고, 캐릭터와 함께 바로 롤플레잉 대화를 시작할 수 있어요."}</p>
-            <Link href={heroStory ? `/stories/${heroStory.id}` : "/create/story"} className="btn btn-primary">
-              지금 시작하기
-            </Link>
+            <div className="hh-actions">
+              <Link href={heroStory ? `/stories/${heroStory.id}` : "/stories"} className="btn btn-primary">
+                지금 시작하기
+              </Link>
+              <Link href="/create/story" className="btn btn-glass">
+                스토리 만들기
+              </Link>
+            </div>
           </div>
         </section>
 

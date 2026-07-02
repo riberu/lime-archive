@@ -1,0 +1,3 @@
+export const CHAT_MESSAGE_COST = 30;
+export const DAILY_ATTENDANCE_REWARD = 300;
+export const WEEKLY_ATTENDANCE_BONUS = 300;

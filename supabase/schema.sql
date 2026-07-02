@@ -144,6 +144,7 @@ create table if not exists public.stories (
   opening_message text not null default '',
   current_scene text not null default '',
   status_text text not null default '',
+  start_settings jsonb not null default '[]'::jsonb,
   tags text[] not null default '{}',
   visibility text not null default 'private' check (visibility in ('public', 'private')),
   share_slug text unique,

@@ -65,7 +65,7 @@ export default async function StoryDetailPage({
             </div>
             <p className="synopsis">{story.description}</p>
             <div className="cta-row">
-              <StartChatButton storyId={story.id} scene={story.currentScene} />
+              <StartChatButton storyId={story.id} startSettings={story.startSettings} />
               <StoryLikeButton storyId={story.id} initialLikeCount={story.likeCount} />
               <button type="button" className="btn btn-ghost">
                 <Share2 size={16} /> 공유
@@ -77,14 +77,14 @@ export default async function StoryDetailPage({
         <div className="story-tabs">
           <button className="on" type="button">등장인물</button>
           <button type="button">세계관</button>
-          <button type="button">1화 미리보기</button>
+          <button type="button">미리보기</button>
         </div>
 
         <section className="story-tab on">
           <div className="cast-grid">
             {characters.length ? (
               characters.map((character) => (
-                <Link key={character.id} href={`/characters/${character.id}`} className="cast">
+                <article key={character.id} className="cast">
                   <span className="av relative overflow-hidden">
                     {character.avatarUrl ? <Image src={character.avatarUrl} alt={character.name} fill suppressHydrationWarning className="object-cover" /> : null}
                   </span>
@@ -93,7 +93,7 @@ export default async function StoryDetailPage({
                     <b className="nm">{character.name}</b>
                     <span className="ds">{character.description}</span>
                   </span>
-                </Link>
+                </article>
               ))
             ) : (
               <p className="empty-line">아직 연결된 캐릭터가 없어요.</p>
@@ -112,15 +112,15 @@ export default async function StoryDetailPage({
         </section>
 
         <section className="preview-scene">
-          <div className="scene-label">1화 · 이야기의 시작</div>
+          <div className="scene-label">첫 장면 미리보기</div>
           <PersonaTemplateText
             className="narration"
             text={story.openingMessage}
-            fallback="첫 장면이 시작되면 여기에 설정을 바탕으로 대화가 이어집니다."
+            fallback="시작 설정을 선택하면 해당 장면으로 채팅방이 열립니다. 자유시작은 사용자의 첫 입력부터 시작합니다."
           />
           <div className="scene-fade">
-            <p>다음은 사용자의 선택과 유저 노트에 따라 이어집니다.</p>
-            <StartChatButton storyId={story.id} scene={story.currentScene} />
+            <p>새 채팅방을 만들 때 시작 설정을 선택할 수 있어요.</p>
+            <StartChatButton storyId={story.id} startSettings={story.startSettings} />
           </div>
         </section>
       </section>

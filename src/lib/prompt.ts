@@ -19,7 +19,10 @@ export function buildSystemInstruction(params: {
   const episode = params.episodeState ?? {};
   const storyPrompt = renderStoryTemplate(params.story.systemPrompt || "고정 세계관이 아직 작성되지 않았습니다.", protagonistName);
   const currentScene = renderStoryTemplate(params.currentScene || params.story.currentScene || "불명", protagonistName);
-  const statusText = renderStoryTemplate(params.story.statusText || "불명", protagonistName);
+  const episodeStatusText = typeof episode.statusText === "string" ? episode.statusText : "";
+  const startSettingTitle = typeof episode.startSettingTitle === "string" ? episode.startSettingTitle : "";
+  const startGuide = typeof episode.startGuide === "string" ? episode.startGuide : "";
+  const statusText = renderStoryTemplate(episodeStatusText || params.story.statusText || "불명", protagonistName);
 
   return [
     "[서버 공통 AI 행동규칙 - 모든 작품에 강제 적용]",
@@ -108,8 +111,10 @@ export function buildSystemInstruction(params: {
     params.memorySummary || "아직 요약 메모리가 없다.",
     "",
     "[현재 장면/상태]",
+    `시작 설정: ${startSettingTitle || "기본"}`,
     `현재 장면: ${currentScene}`,
     `상태: ${statusText}`,
+    startGuide ? `시작 가이드: ${renderStoryTemplate(startGuide, protagonistName)}` : "",
     `에피소드 상태: ${JSON.stringify(episode, null, 2)}`,
     "",
     `이제 ${protagonistName}의 다음 행동이 user 메시지로 주어진다. 위 규칙에 맞춰 이야기를 이어 써라.`

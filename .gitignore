@@ -7,3 +7,6 @@ dist
 .env.*
 !.env.example
 .pnpm-store
+
+.vercel
+.env*

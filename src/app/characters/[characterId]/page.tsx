@@ -2,7 +2,6 @@ import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { WorkspaceLayout } from "@/components/app-shell";
-import { StartChatButton } from "@/components/start-chat-button";
 import { getCharacter, getCharacters } from "@/lib/data";
 
 export const dynamic = "force-dynamic";
@@ -17,8 +16,10 @@ export default async function CharacterDetailPage({
   const { characterId } = await params;
   const [character, allCharacters] = await Promise.all([getCharacter(characterId), getCharacters()]);
   if (!character) notFound();
+  if (character.storyId || (character.scope && character.scope !== "independent")) notFound();
 
   const similar = allCharacters.filter((item) => item.id !== character.id).slice(0, 8);
+  const tags = character.personality ? character.personality.split(/[,\s#]+/).filter(Boolean).slice(0, 4) : ["캐릭터", "대화"];
 
   return (
     <WorkspaceLayout>
@@ -34,20 +35,27 @@ export default async function CharacterDetailPage({
           <h1>{character.name}</h1>
           <div className="maker">제작 · 라임 크리에이터</div>
           <div className="ctags">
-            {(character.personality ? character.personality.split(/[,\s#]+/).filter(Boolean).slice(0, 4) : ["캐릭터", "대화"]).map((tag) => (
-              <span key={tag} className="ctag">#{tag}</span>
+            {tags.map((tag) => (
+              <span key={tag} className="ctag">
+                #{tag}
+              </span>
             ))}
           </div>
           <div className="cstats">
-            <div><div className="n">대화</div><div className="l">바로 시작</div></div>
-            <div><div className="n">공개</div><div className="l">상태</div></div>
-            <div><div className="n">AI</div><div className="l">롤플레잉</div></div>
+            <div>
+              <div className="n">대화</div>
+              <div className="l">바로 시작</div>
+            </div>
+            <div>
+              <div className="n">공개</div>
+              <div className="l">상태</div>
+            </div>
+            <div>
+              <div className="n">AI</div>
+              <div className="l">롤플레잉</div>
+            </div>
           </div>
-          {character.storyId ? (
-            <StartChatButton storyId={character.storyId} characterId={character.id} title={`${character.name} 채팅`} />
-          ) : (
-            <p className="locked-note">연결된 스토리가 있어야 캐릭터 채팅을 시작할 수 있습니다.</p>
-          )}
+          <p className="locked-note">독립 캐릭터 채팅은 다음 단계에서 연결됩니다.</p>
         </div>
 
         <div className="chat-preview">
@@ -57,7 +65,7 @@ export default async function CharacterDetailPage({
             <div className="bubble">{character.firstMessage || "안녕, 오늘은 무슨 이야기를 들려줄래?"}</div>
           </div>
           <div className="msg me">
-            <div className="bubble">너에 대해 더 알고 싶어.</div>
+            <div className="bubble">너에 대해 알고 싶어.</div>
           </div>
           <div className="msg">
             <div className="av" />

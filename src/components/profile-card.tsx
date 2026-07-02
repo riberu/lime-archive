@@ -345,6 +345,14 @@ export function ProfileCard() {
         </div>
 
         <div className="set-group">
+          <div className="gt">서비스</div>
+          <Link href="/wallet" className="set-row">
+            <span className="k">라임 지갑</span>
+            <span className="v link">잔액·출석·충전 관리</span>
+          </Link>
+        </div>
+
+        <div className="set-group">
           <div className="gt row-title">
             내 페르소나
             <button type="button" className="mini-add" onClick={openNewPersona} aria-label="페르소나 추가">

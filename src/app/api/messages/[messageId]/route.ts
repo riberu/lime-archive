@@ -1,4 +1,7 @@
 import { NextResponse } from "next/server";
+import { getCharacters, getMessages, getSession, getStory } from "@/lib/data";
+import { rebuildSessionMemoriesFromMessages } from "@/lib/memories";
+import { extractProtagonistName } from "@/lib/prompt";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
 import { localStore } from "@/lib/local-store";
 
@@ -31,6 +34,7 @@ export async function PATCH(request: Request, { params }: MessageRouteParams) {
         (item) => item.sessionId !== message.sessionId || item.createdAt <= message.createdAt
       );
     }
+    await rebuildMemoriesForSession(message.sessionId);
     return NextResponse.json({ message });
   }
 
@@ -67,5 +71,57 @@ export async function PATCH(request: Request, { params }: MessageRouteParams) {
     }
   }
 
+  await rebuildMemoriesForSession(current.session_id);
+
   return NextResponse.json({ message: data });
+}
+
+export async function DELETE(_request: Request, { params }: MessageRouteParams) {
+  const { messageId } = await params;
+  const supabase = getSupabaseServerClient();
+
+  if (!supabase) {
+    const message = localStore.messages.find((item) => item.id === messageId);
+    if (!message) return NextResponse.json({ error: "Message not found" }, { status: 404 });
+    localStore.messages = localStore.messages.filter((item) => item.id !== messageId);
+    await rebuildMemoriesForSession(message.sessionId);
+    return NextResponse.json({ deletedId: messageId, sessionId: message.sessionId });
+  }
+
+  const { data: current, error: readError } = await supabase
+    .from("chat_messages")
+    .select("id, session_id")
+    .eq("id", messageId)
+    .single<{ id: string; session_id: string }>();
+
+  if (readError) {
+    return NextResponse.json({ error: readError.message }, { status: 404 });
+  }
+
+  const { error } = await supabase.from("chat_messages").delete().eq("id", messageId);
+
+  if (error) {
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+
+  await rebuildMemoriesForSession(current.session_id);
+
+  return NextResponse.json({ deletedId: messageId, sessionId: current.session_id });
+}
+
+async function rebuildMemoriesForSession(sessionId: string) {
+  const session = await getSession(sessionId);
+  if (!session) return;
+
+  const story = await getStory(session.storyId);
+  const characters = story ? await getCharacters(story.id) : [];
+  const messages = await getMessages(sessionId);
+
+  await rebuildSessionMemoriesFromMessages({
+    sessionId,
+    messages,
+    characters,
+    currentScene: session.currentScene || story?.currentScene || "",
+    protagonistName: extractProtagonistName(session.userNote)
+  });
 }

@@ -26,6 +26,7 @@ import {
   SlidersHorizontal,
   Sparkles,
   SquarePen,
+  Trash2,
   Type,
   X
 } from "lucide-react";
@@ -434,6 +435,30 @@ export function ChatRoom({
     setEditError("");
   };
 
+  const deleteMessage = async (message: ChatMessage) => {
+    if (streaming) return;
+    const confirmed = window.confirm("이 메시지를 삭제할까요? 관련 요약 메모리도 남은 대화 기준으로 다시 정리됩니다. 삭제한 메시지는 복원할 수 없어요.");
+    if (!confirmed) return;
+
+    setMessageMenuId(null);
+    const response = await fetch(`/api/messages/${message.id}`, {
+      method: "DELETE"
+    });
+
+    if (!response.ok) {
+      const payload = (await response.json().catch(() => null)) as { error?: string } | null;
+      window.alert(payload?.error ?? "메시지를 삭제하지 못했어요. 새로고침 후 다시 시도해 주세요.");
+      return;
+    }
+
+    setMessages((current) => current.filter((item) => item.id !== message.id));
+    if (editingMessageId === message.id) {
+      setEditingMessageId(null);
+      setEditDraft("");
+      setEditError("");
+    }
+  };
+
   const triggerTimeSkip = () => {
     void sendMessage("시간을 조금 건너뛰고, 현재 세계관과 이전 대화에 어울리는 다음 장면을 이어 써줘.");
   };
@@ -580,7 +605,12 @@ export function ChatRoom({
                           {messageMenuId === message.id ? (
                             <div className="message-menu">
                               <button type="button" onClick={() => beginEditMessage(message)}>
+                                <Pencil size={12} />
                                 수정하기
+                              </button>
+                              <button type="button" className="danger" onClick={() => void deleteMessage(message)}>
+                                <Trash2 size={12} />
+                                삭제하기
                               </button>
                             </div>
                           ) : null}

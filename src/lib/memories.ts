@@ -1,12 +1,14 @@
 import { getSupabaseServerClient } from "@/lib/supabase/server";
 import { localStore, nowIso, slugId } from "@/lib/local-store";
-import type { Character, MemoryEntry, MemoryEntryType } from "@/lib/types";
+import type { Character, ChatMessage, MemoryEntry, MemoryEntryType } from "@/lib/types";
 
 export const memoryTypes = ["short", "long", "character", "location"] as const satisfies readonly MemoryEntryType[];
 const BASE_CHARACTER_TAG = "base-character";
 const GENERATED_CHARACTER_TAG = "generated-character";
 const MEMORY_VERSION_TAG = "memory-v2";
 const BASE_CHARACTER_CONTENT = "";
+const EMBEDDED_EVENT_PLAN_MARKER = "[[EVENT_PLAN]]";
+const EMBEDDED_SUGGESTIONS_MARKER = "[[SUGGESTIONS]]";
 
 type MemoryRow = {
   id: string;
@@ -219,6 +221,113 @@ export async function purgeOutdatedGeneratedMemories(sessionId: string) {
   const { error } = await supabase.from("memory_entries").delete().in("id", deleteIds);
   if (error) throw new Error(error.message);
   return deleteIds.length + resetBase.length;
+}
+
+export async function resetGeneratedMemories(sessionId: string) {
+  const memories = await listMemories(sessionId);
+  let changed = 0;
+
+  for (const memory of memories) {
+    if (memory.tags.includes(BASE_CHARACTER_TAG)) {
+      if (memory.content !== BASE_CHARACTER_CONTENT || !memory.tags.includes(MEMORY_VERSION_TAG)) {
+        await updateMemory(memory.id, {
+          content: BASE_CHARACTER_CONTENT,
+          tags: mergeTags(memory.tags, [MEMORY_VERSION_TAG])
+        });
+        changed += 1;
+      }
+      continue;
+    }
+
+    await deleteMemory(memory.id);
+    changed += 1;
+  }
+
+  return changed;
+}
+
+export async function rebuildSessionMemoriesFromMessages({
+  sessionId,
+  messages,
+  characters,
+  currentScene,
+  protagonistName
+}: {
+  sessionId: string;
+  messages: ChatMessage[];
+  characters: Character[];
+  currentScene: string;
+  protagonistName?: string;
+}) {
+  await resetGeneratedMemories(sessionId);
+  await ensureBaseCharacterMemories(sessionId, characters);
+
+  const orderedMessages = [...messages].sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+  let pendingUserText = "";
+  let messageCount = 0;
+
+  for (const message of orderedMessages) {
+    if (message.role === "system") continue;
+
+    if (message.role === "user") {
+      pendingUserText = message.content;
+      continue;
+    }
+
+    if (message.role !== "assistant" || !pendingUserText.trim()) continue;
+
+    const eventPlan = parseEmbeddedEventPlan(message.content);
+    if (eventPlan) {
+      await recordMemoriesFromPlan({
+        sessionId,
+        plan: eventPlan,
+        characters,
+        currentScene,
+        messageCount
+      });
+    } else {
+      await recordMemoriesFromTurn({
+        sessionId,
+        userText: pendingUserText,
+        assistantText: stripHiddenMemoryBlocks(message.content),
+        characters,
+        currentScene,
+        protagonistName,
+        messageCount
+      });
+    }
+
+    pendingUserText = "";
+    messageCount += 2;
+  }
+}
+
+function stripHiddenMemoryBlocks(text: string) {
+  const hiddenIndexes = [text.lastIndexOf(EMBEDDED_EVENT_PLAN_MARKER), text.lastIndexOf(EMBEDDED_SUGGESTIONS_MARKER)].filter(
+    (index) => index >= 0
+  );
+  const index = hiddenIndexes.length ? Math.min(...hiddenIndexes) : -1;
+  return index >= 0 ? text.slice(0, index).trim() : text;
+}
+
+function parseEmbeddedEventPlan(text: string): EventPlan | null {
+  const eventIndex = text.lastIndexOf(EMBEDDED_EVENT_PLAN_MARKER);
+  if (eventIndex < 0) return null;
+
+  const suggestionsIndex = text.lastIndexOf(EMBEDDED_SUGGESTIONS_MARKER);
+  const raw = text
+    .slice(eventIndex + EMBEDDED_EVENT_PLAN_MARKER.length, suggestionsIndex > eventIndex ? suggestionsIndex : undefined)
+    .replace(/```json|```/g, "")
+    .trim();
+  const start = raw.indexOf("{");
+  const end = raw.lastIndexOf("}");
+  if (start < 0 || end <= start) return null;
+
+  try {
+    return JSON.parse(raw.slice(start, end + 1)) as EventPlan;
+  } catch {
+    return null;
+  }
 }
 
 export async function ensureBaseCharacterMemories(sessionId: string, characters: Character[]) {

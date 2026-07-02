@@ -1314,11 +1314,20 @@ body.dark .user-dialogue {
 
 .message-menu button {
   width: 100%;
+  gap: 6px;
   justify-content: flex-start;
   border-radius: 6px;
   padding: 6px 8px;
   color: var(--foreground);
   font-size: 11px;
+}
+
+.message-menu button.danger {
+  color: #dc2626;
+}
+
+.message-menu button.danger:hover {
+  background: rgba(220, 38, 38, 0.08);
 }
 
 .message-editor {
